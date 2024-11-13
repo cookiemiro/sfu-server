@@ -34,7 +34,6 @@ const routes = [
   // },
   {
     path: '/streaming',
-    name: 'StreamingRoom',
     component: StreamingRoom,
   },
 ]

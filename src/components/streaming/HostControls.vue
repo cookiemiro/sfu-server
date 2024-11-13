@@ -29,6 +29,8 @@ const props = defineProps({
 defineEmits(['leave', 'toggle-camera', 'toggle-screen'])
 </script>
 
+<!-- scoped는 해당 컴포넌트의 css가 다른 컴포넌트에 영향을 주지 않도록 한다.(scope) -->
+<!-- https://blog.jeongwoo.in/vue-js-scoped-css-1b77c9a1b8bb -->
 <style scoped>
 .host-controls {
   padding: 1rem;

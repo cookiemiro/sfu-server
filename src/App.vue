@@ -3,7 +3,7 @@
   <div class="app">
     <nav class="nav">
       <!-- <router-link to="/">Home</router-link> | -->
-      <router-link to="/streaming">Streaming Room</router-link>
+      <router-link to="/streaming">방송 보기</router-link>
     </nav>
 
     <main class="main">
@@ -25,7 +25,7 @@
 }
 
 .nav {
-  padding: 30px;
+  padding: 10px;
   text-align: center;
 }
 
@@ -43,6 +43,5 @@
 .main {
   max-width: 1200px;
   margin: 0 auto;
-  padding: 20px;
 }
 </style>
