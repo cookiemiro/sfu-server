@@ -1,11 +1,5 @@
-// App.vue
 <template>
   <div class="app">
-    <nav class="nav">
-      <!-- <router-link to="/">Home</router-link> | -->
-      <router-link to="/streaming">방송 보기</router-link>
-    </nav>
-
     <main class="main">
       <router-view></router-view>
     </main>
@@ -22,26 +16,26 @@
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   color: #2c3e50;
-}
-
-.nav {
-  padding: 10px;
-  text-align: center;
-}
-
-.nav a {
-  color: #2c3e50;
-  text-decoration: none;
-  margin: 0 10px;
-}
-
-.nav a.router-link-active {
-  color: #42b983;
-  font-weight: bold;
+  height: 100vh;
+  margin: 0;
+  padding: 0;
 }
 
 .main {
-  max-width: 1200px;
-  margin: 0 auto;
+  height: 100%;
+  /* max-width 제거하여 전체 화면 너비 사용 */
+}
+
+/* CSS Reset 추가 */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  overflow: hidden; /* 페이지 레벨의 스크롤 방지 */
 }
 </style>

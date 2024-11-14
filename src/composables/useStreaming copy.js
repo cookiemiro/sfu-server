@@ -24,28 +24,33 @@ export const useStreaming = () => {
     createProducers,
     cleanupProducers,
     cleanup,
+    // cleanupConsumers,
     consume,
+    setRemoteMediaEl,
   } = useMediasoup()
 
-  // 시청자 비디오 엘리먼트 연결
   watch(
     () => remoteMediaRef.value,
     (el) => {
-      if (el?.videoRef) {
+      if (el) {
+        // DOM 요소가 마운트된 후에 setRemoteMediaEl 호출
         nextTick(() => {
-          if (window.remoteVideo) {
-            window.remoteVideo = el.videoRef
-          }
+          setRemoteMediaEl(el.remoteMediaRef)
         })
       }
     },
     { immediate: true },
   )
 
-  // 컴포넌트 언마운트 시 정리
+  // 컴포넌트 언마운트 시
   onBeforeUnmount(() => {
     if (joined.value) {
       leaveRoom()
+    }
+    if (socket.value) {
+      socket.value.removeAllListeners()
+      socket.value.disconnect()
+      socket.value = null
     }
   })
 
@@ -54,7 +59,7 @@ export const useStreaming = () => {
       localStream.value.getTracks().forEach((track) => track.stop())
       localStream.value = null
     }
-    if (localVideoRef.value?.videoRef) {
+    if (localVideoRef.value && localVideoRef.value.videoRef) {
       localVideoRef.value.videoRef.srcObject = null
     }
     cleanupProducers()
@@ -64,21 +69,32 @@ export const useStreaming = () => {
     try {
       const stream = await createMediaStream()
       await handleMediaStream(stream, localVideoRef)
-      if (sendTransport.value) {
-        await createProducers(sendTransport.value, stream)
-      }
+      await createProducers(sendTransport.value, stream)
     } catch (error) {
       console.error('Failed to start camera:', error)
-      alert('카메라 시작에 실패했습니다.')
     }
   }
 
-  const joinRoom = async () => {
-    if (!socket.value) {
-      await initializeSocket()
-    }
+  // const stopScreenShare = () => {
+  //   if (screenProducer.value) {
+  //     screenProducer.value.close()
+  //     screenProducer.value = null
+  //   }
+  // }
 
-    if (!roomId.value) return
+  // const startScreenShare = async () => {
+  //   try {
+  //     const stream = await navigator.mediaDevices.getDisplayMedia({ video: true })
+  //     const screenTrack = stream.getVideoTracks()[0]
+  //     screenProducer.value = await sendTransport.value.produce({ track: screenTrack })
+  //     screenTrack.onended = stopScreenShare
+  //   } catch (error) {
+  //     console.error('Failed to start screen share:', error)
+  //   }
+  // }
+
+  const joinRoom = async () => {
+    if (!socket.value || !roomId.value) return
     if (!window.confirm('방에 참여하시겠습니까?')) return
 
     try {
@@ -88,14 +104,11 @@ export const useStreaming = () => {
       })
 
       socket.value.on('room-joined', async (response) => {
-        if (response.error) {
-          throw new Error(response.error)
-        }
+        if (response.error) throw new Error(response.error)
         await setupRoom(response)
       })
     } catch (error) {
       console.error('Failed to join room:', error)
-      alert('방 입장에 실패했습니다.')
     }
   }
 
@@ -126,31 +139,6 @@ export const useStreaming = () => {
       joined.value = true
     } catch (error) {
       console.error('Error in setupRoom:', error)
-      alert('방 설정에 실패했습니다.')
-      await leaveRoom()
-    }
-  }
-
-  const leaveRoom = async () => {
-    try {
-      // 먼저 모든 미디어 및 연결 정리
-      cleanup()
-
-      // Socket 연결 재설정
-      if (socket.value) {
-        socket.value.disconnect()
-        socket.value = null
-      }
-
-      // 상태 초기화
-      joined.value = false
-      roomId.value = ''
-      userRole.value = ''
-
-      // 새로운 소켓 연결 초기화
-      await initializeSocket()
-    } catch (error) {
-      console.error('Error leaving room:', error)
     }
   }
 
@@ -159,6 +147,37 @@ export const useStreaming = () => {
       stopCamera()
     } else {
       await startCamera()
+    }
+  }
+
+  // const toggleScreenShare = async () => {
+  //   if (screenProducer.value) {
+  //     stopScreenShare()
+  //   } else {
+  //     await startScreenShare()
+  //   }
+  // }
+
+  // const leaveRoom = () => {
+  //   if (joined.value) {
+  //     cleanupConsumers()
+  //     stopCamera()
+  //     // stopScreenShare()
+  //     socket.value?.emit('leave-room')
+  //     joined.value = false
+  //     peers.value = []
+  //     viewers.value = []
+  //   }
+  // }
+
+  const leaveRoom = () => {
+    if (joined.value) {
+      cleanup()
+      socket.value?.emit('leave-room')
+
+      // Socket 이벤트 리스너 제거
+      // socket.value?.removeAllListeners('room-joined')
+      // socket.value?.removeAllListeners('new-producer')
     }
   }
 
@@ -176,8 +195,11 @@ export const useStreaming = () => {
     joinRoom,
     leaveRoom,
     toggleCamera,
+    // toggleScreenShare,
     startCamera,
     stopCamera,
+    // startScreenShare,
+    // stopScreenShare,
     initializeSocket,
   }
 }

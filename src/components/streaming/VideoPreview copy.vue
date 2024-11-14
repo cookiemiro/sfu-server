@@ -1,6 +1,6 @@
 <template>
   <div class="video-preview">
-    <video ref="videoEl" class="preview-video" autoplay playsinline muted></video>
+    <video ref="videoRef" :srcObject="stream" autoplay playsinline muted class="preview-video" />
   </div>
 </template>
 
@@ -33,30 +33,15 @@ defineExpose({ videoRef })
 
 <style scoped>
 .video-preview {
-  position: relative;
   width: 100%;
-  height: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  max-width: 640px;
+  margin: 0 auto;
 }
 
 .preview-video {
-  max-width: 100%;
-  max-height: 100%;
-  width: auto;
-  height: auto;
-  object-fit: contain;
-}
-
-@media (max-width: 768px) {
-  .video-preview {
-    aspect-ratio: 16 / 9;
-  }
-
-  .preview-video {
-    width: 100%;
-    height: 100%;
-  }
+  width: 100%;
+  aspect-ratio: 16/9;
+  background: #000;
+  border-radius: 8px;
 }
 </style>

@@ -1,44 +1,58 @@
 <template>
-  <div class="streaming-room">
-    <RoomHeader :socket-id="socket?.id" :room-id="roomId" />
-    <!-- <RoomHeader /> -->
+  <div class="streaming-layout">
+    <div v-if="!joined">
+      <room-join-form v-model:room-id="roomId" v-model:user-role="userRole" @join="joinRoom" />
+    </div>
 
-    <!-- 조건부 렌더링: v-if, v-else -->
-    <!-- https://ko.vuejs.org/guide/essentials/conditional -->
-    <!-- 유저가 방에 참여했다면 v-else template를 보여준다. -->
-    <room-join-form
-      v-if="!joined"
-      v-model:room-id="roomId"
-      v-model:user-role="userRole"
-      @join="joinRoom"
-    ></room-join-form>
+    <div v-else class="grid-container">
+      <!-- Streaming Area -->
+      <div class="streaming-area">
+        <host-controls
+          v-if="userRole === 'host'"
+          :local-stream="localStream"
+          :screen-producer="screenProducer"
+          @leave="leaveRoom"
+          @toggle-camera="toggleCamera"
+        >
+          <video-preview v-if="localStream" ref="localVideoRef" :stream="localStream" />
+        </host-controls>
 
-    <template v-else>
-      <host-controls
-        v-if="userRole === 'host'"
-        :local-stream="localStream"
-        :screen-producer="screenProducer"
-        @leave="leaveRoom"
-        @toggle-camera="toggleCamera"
-      >
-        <video-preview v-if="localStream" ref="localVideoRef" :stream="localStream" />
-      </host-controls>
+        <viewer-controls v-else @leave="leaveRoom" />
+        <remote-media v-if="userRole === 'viewer'" ref="remoteMediaRef" />
+      </div>
 
-      <viewer-controls v-else @leave="leaveRoom" />
+      <!-- Chat Area -->
+      <div class="chat-area">
+        <div class="area-header">실시간 채팅</div>
+        <chat-component />
+      </div>
 
-      <viewer-list v-if="userRole === 'host'" :viewers="viewers" />
+      <!-- Product Info Area -->
+      <div class="product-info-area">
+        <div class="area-header">상품 정보</div>
+        <div class="scrollable-content">
+          <product-info-component />
+        </div>
+      </div>
 
-      <!-- ref 템플릿 참조 -->
-      <!-- https://ko.vuejs.org/guide/essentials/template-refs -->
-      <remote-media v-if="userRole === 'viewer'" ref="remoteMediaRef" />
-    </template>
+      <!-- Stream Summary Area -->
+      <div class="stream-summary-area">
+        <div class="area-header">스트리밍 요약</div>
+        <div class="scrollable-content">
+          <stream-summary-component />
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
 <script setup>
+import ChatComponent from './ChatComponent.vue'
+import ProductInfoComponent from './ProductInfoComponent.vue'
+import StreamSummaryComponent from './StreamSummaryComponent.vue'
+
 import { onMounted, onBeforeUnmount } from 'vue'
 import { useStreaming } from '../composables/useStreaming'
-import RoomHeader from '@/components/streaming/RoomHeader.vue'
 import RoomJoinForm from '@/components/streaming/RoomJoinForm.vue'
 import HostControls from '@/components/streaming/HostControls.vue'
 import ViewerControls from '@/components/streaming/ViewerControls.vue'
@@ -83,17 +97,85 @@ onBeforeUnmount(() => {
 </script>
 
 <style scoped>
-.streaming-room {
-  padding: 2rem;
+.streaming-layout {
+  width: 100%;
+  height: 100vh;
+  padding: 1rem;
 }
 
-.streaming-room > * + * {
-  margin-top: 2rem;
+.grid-container {
+  display: grid;
+  grid-template-columns: 60% 40%;
+  grid-template-rows: 70% 30%;
+  gap: 1rem;
+  height: calc(100vh - 2rem);
 }
 
+.streaming-area {
+  background-color: #f8f9fa;
+  border-radius: 0.5rem;
+  padding: 1rem;
+}
+
+.chat-area {
+  background-color: #f8f9fa;
+  border-radius: 0.5rem;
+  padding: 1rem;
+  display: flex;
+  flex-direction: column;
+}
+
+.product-info-area,
+.stream-summary-area {
+  background-color: #f8f9fa;
+  border-radius: 0.5rem;
+  padding: 1rem;
+  display: flex;
+  flex-direction: column;
+}
+
+.area-header {
+  font-size: 1.25rem;
+  font-weight: 600;
+  margin-bottom: 1rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid #dee2e6;
+}
+
+.scrollable-content {
+  flex: 1;
+  overflow-y: auto;
+  padding-right: 0.5rem;
+}
+
+/* 스크롤바 스타일링 */
+.scrollable-content::-webkit-scrollbar {
+  width: 6px;
+}
+
+.scrollable-content::-webkit-scrollbar-track {
+  background: #f1f1f1;
+  border-radius: 3px;
+}
+
+.scrollable-content::-webkit-scrollbar-thumb {
+  background: #888;
+  border-radius: 3px;
+}
+
+.scrollable-content::-webkit-scrollbar-thumb:hover {
+  background: #555;
+}
+
+/* 반응형 디자인 */
 @media (max-width: 768px) {
-  .streaming-room {
-    padding: 1rem;
+  .grid-container {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto auto auto auto;
+  }
+
+  .streaming-layout {
+    padding: 0.5rem;
   }
 }
 </style>

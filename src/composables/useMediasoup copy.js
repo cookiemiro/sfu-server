@@ -23,65 +23,24 @@ export const useMediasoup = () => {
   const mainVideoElement = ref(null)
   const currentConsumers = ref(new Map())
 
-  // const initializeSocket = () => {
-  //   socket.value = io(SERVER_URL)
-
-  //   socket.value.on('connect', () => {
-  //     console.log('Connected to server:', socket.value.id)
-  //   })
-
-  //   socket.value.on('new-peer', ({ peerId }) => {
-  //     peers.value.push(peerId)
-  //   })
-
-  //   socket.value.on('peer-left', ({ peerId }) => {
-  //     peers.value = peers.value.filter((id) => id !== peerId)
-  //   })
-
-  //   socket.value.on('viewers-updated', (updatedViewers) => {
-  //     viewers.value = updatedViewers
-  //   })
-  // }
   const initializeSocket = () => {
-    try {
-      // 기존 소켓이 있다면 정리
-      if (socket.value) {
-        socket.value.removeAllListeners()
-        socket.value.disconnect()
-        socket.value = null
-      }
+    socket.value = io(SERVER_URL)
 
-      socket.value = io(SERVER_URL)
+    socket.value.on('connect', () => {
+      console.log('Connected to server:', socket.value.id)
+    })
 
-      socket.value.on('connect', () => {
-        console.log('Connected to server:', socket.value.id)
-      })
+    socket.value.on('new-peer', ({ peerId }) => {
+      peers.value.push(peerId)
+    })
 
-      socket.value.on('connect_error', (error) => {
-        console.error('Socket connection error:', error)
-        // 연결 오류 시 재시도
-        setTimeout(initializeSocket, 5000)
-      })
+    socket.value.on('peer-left', ({ peerId }) => {
+      peers.value = peers.value.filter((id) => id !== peerId)
+    })
 
-      socket.value.on('new-peer', ({ peerId }) => {
-        if (!peers.value.includes(peerId)) {
-          peers.value.push(peerId)
-        }
-      })
-
-      socket.value.on('peer-left', ({ peerId }) => {
-        peers.value = peers.value.filter((id) => id !== peerId)
-      })
-
-      socket.value.on('viewers-updated', (updatedViewers) => {
-        viewers.value = updatedViewers
-      })
-
-      return socket.value
-    } catch (error) {
-      console.error('Error initializing socket:', error)
-      throw error
-    }
+    socket.value.on('viewers-updated', (updatedViewers) => {
+      viewers.value = updatedViewers
+    })
   }
 
   const createDevice = async (rtpCapabilities) => {
@@ -197,75 +156,14 @@ export const useMediasoup = () => {
     })
   }
 
-  // const cleanup = () => {
-  //   cleanupConsumers()
-  //   cleanupProducers()
-  //   closeTransports()
-  //   device.value = null
-  //   joined.value = false
-  //   peers.value = []
-  //   viewers.value = []
-  // }
-
   const cleanup = () => {
-    try {
-      // Consumers 정리
-      currentConsumers.value.forEach(({ consumer }) => {
-        try {
-          consumer.close()
-        } catch (error) {
-          console.warn('Error closing consumer:', error)
-        }
-      })
-      currentConsumers.value.clear()
-
-      // Audio elements 정리
-      const audioElements = document.querySelectorAll('audio')
-      audioElements.forEach((el) => el.remove())
-
-      // Video element 정리
-      if (window.remoteVideo) {
-        window.remoteVideo.srcObject = null
-      }
-
-      // Producers 정리
-      cleanupProducers()
-
-      // Transports 정리
-      closeTransports()
-
-      // Device 정리
-      if (device.value) {
-        device.value = null
-      }
-
-      // Socket 이벤트 리스너 정리
-      if (socket.value) {
-        socket.value.removeAllListeners('consume-response')
-        socket.value.removeAllListeners('new-producer')
-        socket.value.removeAllListeners('producer-closed')
-        socket.value.removeAllListeners('connect-transport')
-        socket.value.removeAllListeners('new-peer')
-        socket.value.removeAllListeners('peer-left')
-        socket.value.removeAllListeners('viewers-updated')
-        socket.value.disconnect()
-        socket.value = null
-      }
-
-      // 상태 초기화
-      joined.value = false
-      peers.value = []
-      viewers.value = []
-      localStream.value = null
-      mainVideoElement.value = null
-      remoteMediaEl.value = null
-      device.value = null
-
-      // window 객체의 remoteVideo 제거
-      delete window.remoteVideo
-    } catch (error) {
-      console.error('Error during cleanup:', error)
-    }
+    cleanupConsumers()
+    cleanupProducers()
+    closeTransports()
+    device.value = null
+    joined.value = false
+    peers.value = []
+    viewers.value = []
   }
 
   const consume = async ({ producerId, peerId, kind }) => {
@@ -274,7 +172,7 @@ export const useMediasoup = () => {
       return
     }
 
-    if (peerId === socket.value?.id) return
+    if (peerId === socket.value.id) return
 
     try {
       const rawDevice = toRaw(device.value)
@@ -290,7 +188,6 @@ export const useMediasoup = () => {
         return
       }
 
-      // 서버에 consume 요청
       socket.value.emit('consume', {
         transportId: rawTransport.id,
         producerId,
@@ -317,46 +214,9 @@ export const useMediasoup = () => {
 
       await consumer.resume()
 
-      // 비디오 스트림 처리
-      if (consumer.kind === 'video') {
-        const stream = new MediaStream([consumer.track])
-        const videoElement = window.remoteVideo
-        if (videoElement) {
-          videoElement.srcObject = stream
-          try {
-            await videoElement.play()
-          } catch (error) {
-            console.warn('Autoplay failed, trying with muted:', error)
-            videoElement.muted = true
-            await videoElement.play()
-            videoElement.muted = false
-          }
-        }
-      }
-
-      // 오디오 스트림 처리
-      if (consumer.kind === 'audio') {
-        const audioElement = document.createElement('audio')
-        audioElement.autoplay = true
-        audioElement.srcObject = new MediaStream([consumer.track])
-        document.body.appendChild(audioElement)
-
-        // cleanup when consumer ends
-        consumer.on('ended', () => {
-          audioElement.remove()
-        })
-      }
-
-      currentConsumers.value.set(consumer.id, { consumer, consumerData })
-
-      consumer.on('ended', () => {
-        currentConsumers.value.delete(consumer.id)
-      })
-
-      return consumer
+      renderRemoteMedia(consumer, consumerData)
     } catch (error) {
       console.error(`Error consuming ${kind}:`, error)
-      throw new Error(`미디어 수신에 실패했습니다: ${kind}`)
     }
   }
 
