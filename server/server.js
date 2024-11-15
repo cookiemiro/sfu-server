@@ -17,6 +17,8 @@ const io = new Server(server, {
 })
 
 const mediasoupService = new MediasoupService()
+const roomProducers = new Map() // roomId -> Map(peerId -> producers[])
+const roomHosts = new Map() // roomId -> hostPeerId
 
 // Mediasoup 워커 초기화
 await mediasoupService.initialize(1) // 1개의 워커 생성
@@ -43,6 +45,35 @@ const cleanupPeer = (socket, peerId) => {
   })
 }
 
+const emitProducerInfo = (socket, room, roomId, peerId) => {
+  const hostPeerId = roomHosts.get(roomId)
+  if (!hostPeerId) return
+
+  // 활성 호스트 producer 전송
+  const hostPeer = room.getPeer(hostPeerId)
+  if (hostPeer) {
+    hostPeer.producers.forEach((producer, producerId) => {
+      socket.emit('producer-resumed', {
+        producerId,
+        peerId: hostPeerId,
+        kind: producer.kind,
+      })
+    })
+  }
+
+  // 저장된 호스트 producer 전송
+  const savedProducers = roomProducers.get(roomId)
+  if (savedProducers && savedProducers.has(hostPeerId)) {
+    savedProducers.get(hostPeerId).forEach((producer) => {
+      socket.emit('producer-resumed', {
+        producerId: producer.id,
+        peerId: hostPeerId,
+        kind: producer.kind,
+      })
+    })
+  }
+}
+
 io.on('connection', (socket) => {
   console.log('Client connected:', socket.id)
 
@@ -55,25 +86,39 @@ io.on('connection', (socket) => {
     })
   })
 
+  socket.on('request-producer-info', ({ roomId, peerId }) => {
+    try {
+      const room = mediasoupService.getRoom(roomId)
+      if (!room) throw new Error('Room not found')
+
+      emitProducerInfo(socket, room, roomId, peerId)
+    } catch (error) {
+      console.error('Error getting producer info:', error)
+      socket.emit('error', { message: error.message })
+    }
+  })
+
   // 방 참여 요청 처리
-  socket.on('join-room', async ({ roomId, peerId }) => {
+  socket.on('join-room', async ({ roomId, peerId, userRole }) => {
     try {
       const room = await mediasoupService.createRoom(roomId)
       const peer = new Peer(peerId)
-      room.addPeer(peer)
+
+      // userRole에 따라 호스트 여부 결정
+      room.addPeer(peer, userRole === 'host')
 
       // Send/Receive transport 생성
       const sendTransportOptions = await mediasoupService.createWebRtcTransport(room, peer, 'send')
       const recvTransportOptions = await mediasoupService.createWebRtcTransport(room, peer, 'recv')
 
-      // 소켓을 해당 방에 조인
       socket.join(roomId)
 
       // 기존 피어 목록과 프로듀서 정보 수집
       const peerIds = Array.from(room.peers.keys()).filter((id) => id !== peerId)
       const existingProducers = room.getProducerList()
 
-      // 클라이언트에 응답
+      // console.log('Existing producers:', existingProducers) // 디버깅을 위한 로그 추가
+
       socket.emit('room-joined', {
         sendTransportOptions,
         recvTransportOptions,
@@ -82,15 +127,27 @@ io.on('connection', (socket) => {
         existingProducers,
       })
 
-      // 다른 피어들에게 새 피어 입장 알림
       socket.to(roomId).emit('new-peer', { peerId })
-      console.log(`Peer ${peerId} joined room ${roomId}`)
+      console.log(`Peer ${peerId} joined room ${roomId} as ${userRole}`)
+
+      // 시청자가 입장하고 호스트가 있는 경우 호스트의 producer 정보 재전송
+      if (userRole === 'viewer' && room.hostPeerId) {
+        const hostPeer = room.getPeer(room.hostPeerId)
+        if (hostPeer) {
+          hostPeer.producers.forEach((producer, producerId) => {
+            socket.emit('producer-resumed', {
+              producerId,
+              peerId: room.hostPeerId,
+              kind: producer.kind,
+            })
+          })
+        }
+      }
     } catch (error) {
       console.error('Error joining room:', error)
       socket.emit('error', { message: error.message })
     }
   })
-
   socket.on('leave-room', () => {
     console.log('Peer leaving room:', socket.id)
     cleanupPeer(socket, socket.id)
@@ -205,7 +262,6 @@ io.on('connection', (socket) => {
       //     console.log(`Room ${roomId} removed`)
       //   }
       // }
-      console.log('Client disconnected:', socket.id)
       cleanupPeer(socket, socket.id)
     })
   })

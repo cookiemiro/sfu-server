@@ -11,13 +11,14 @@
           v-if="userRole === 'host'"
           :local-stream="localStream"
           :screen-producer="screenProducer"
-          @leave="leaveRoom"
+          :user-role="userRole"
+          @leave="handleHostLeave"
           @toggle-camera="toggleCamera"
         >
           <video-preview v-if="localStream" ref="localVideoRef" :stream="localStream" />
         </host-controls>
 
-        <viewer-controls v-else @leave="leaveRoom" />
+        <viewer-controls v-else :user-role="userRole" @leave="handleViewerLeave" />
       </div>
 
       <!-- Chat Area -->
@@ -50,7 +51,7 @@ import ChatComponent from './ChatComponent.vue'
 import ProductInfoComponent from './ProductInfoComponent.vue'
 import StreamSummaryComponent from './StreamSummaryComponent.vue'
 
-import { onMounted, onBeforeUnmount } from 'vue'
+import { ref, onMounted, onBeforeUnmount } from 'vue'
 import { useStreaming } from '../composables/useStreaming'
 import RoomJoinForm from '@/components/streaming/RoomJoinForm.vue'
 import HostControls from '@/components/streaming/HostControls.vue'
@@ -72,7 +73,7 @@ const {
   peers,
   viewers,
   localStream,
-  userRole,
+  userRole: userRole,
   screenProducer,
 
   // methods
@@ -93,6 +94,14 @@ onBeforeUnmount(() => {
   }
   socket.value?.disconnect()
 })
+
+const handleViewerLeave = () => {
+  leaveRoom() // 기존 leaveRoom 함수 호출
+}
+
+const handleHostLeave = () => {
+  leaveRoom()
+}
 </script>
 
 <style scoped>

@@ -1,43 +1,45 @@
 <template>
-  <div class="remote-media">
-    <video ref="videoRef" class="remote-video" autoplay playsinline></video>
-  </div>
+  <div ref="mediaContainer" class="remote-media-container"></div>
 </template>
 
 <script setup>
-import { ref, onMounted, onBeforeUnmount } from 'vue'
+import { ref, onMounted, onBeforeUnmount, nextTick } from 'vue'
 
-const videoRef = ref(null)
+const mediaContainer = ref(null)
 
-onMounted(() => {
-  if (videoRef.value) {
-    window.remoteVideo = videoRef.value
+onMounted(async () => {
+  await nextTick()
+  if (mediaContainer.value) {
+    emit('update:remoteMediaEl', {
+      mediaContainer: mediaContainer.value,
+    })
   }
 })
 
 onBeforeUnmount(() => {
-  if (videoRef.value) {
-    videoRef.value.srcObject = null
+  const videoElement = document.getElementById('main-stream')
+  if (videoElement) {
+    videoElement.srcObject = null
+    videoElement.remove()
   }
-  delete window.remoteVideo
 })
 
+const emit = defineEmits(['update:remoteMediaEl'])
+
 defineExpose({
-  videoRef,
+  mediaContainer,
 })
 </script>
 
 <style scoped>
-.remote-media {
+.remote-media-container {
   width: 100%;
   height: 100%;
   position: relative;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  background-color: black;
 }
 
-.remote-video {
+:deep(.remote-video) {
   width: 100%;
   height: 100%;
   object-fit: contain;

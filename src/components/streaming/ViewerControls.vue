@@ -2,7 +2,7 @@
   <div class="viewer-container">
     <div class="video-wrapper">
       <div class="video-container">
-        <RemoteMedia ref="remoteRef" />
+        <RemoteMedia ref="remoteRef" v-model:remoteMediaEl="remoteMediaEl" />
       </div>
       <div class="controls-overlay">
         <div class="controls-bar">
@@ -17,17 +17,38 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { ref, watch, onBeforeUnmount } from 'vue'
 import RemoteMedia from './RemoteMedia.vue'
+import { useStreaming } from '@/composables/useStreaming'
+
+const props = defineProps({
+  userRole: {
+    type: String,
+    default: 'viewer',
+  },
+})
 
 const remoteRef = ref(null)
+const remoteMediaEl = ref(null)
+
+const { setRemoteMediaEl, cleanup } = useStreaming()
+
+// remoteMediaEl이 설정되면 setRemoteMediaEl 호출
+watch(remoteMediaEl, (newEl) => {
+  if (newEl) {
+    setRemoteMediaEl(newEl)
+  }
+})
 
 const handleLeave = () => {
-  if (remoteRef.value?.videoRef) {
-    remoteRef.value.videoRef.srcObject = null
-  }
+  cleanup()
   emit('leave')
 }
+
+// 컴포넌트 언마운트 시 정리
+onBeforeUnmount(() => {
+  cleanup()
+})
 
 const emit = defineEmits(['leave'])
 

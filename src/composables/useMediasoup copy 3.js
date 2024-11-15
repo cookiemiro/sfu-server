@@ -354,7 +354,7 @@ export const useMediasoup = () => {
           console.log('Setting up video stream')
           const stream = new MediaStream([consumer.track])
 
-          const videoElement = document.getElementById('main-stream') // id 변경
+          const videoElement = document.querySelector('video-container') // id 변경
           console.log(videoElement)
           if (videoElement) {
             console.log('Found video element, setting stream')
@@ -468,9 +468,7 @@ export const useMediasoup = () => {
       return
     }
 
-    console.log('Setting remote media element:', {
-      mediaContainer: el.mediaContainer,
-    })
+    console.log('Setting remote media element:', el)
     remoteMediaEl.value = el
 
     // 기존 비디오 엘리먼트 제거
