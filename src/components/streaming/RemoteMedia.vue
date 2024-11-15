@@ -29,30 +29,17 @@ defineExpose({
 
 <style scoped>
 .remote-media {
-  position: relative;
   width: 100%;
   height: 100%;
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
 }
 
 .remote-video {
-  max-width: 100%;
-  max-height: 100%;
-  width: auto;
-  height: auto;
+  width: 100%;
+  height: 100%;
   object-fit: contain;
-}
-
-@media (max-width: 768px) {
-  .remote-media {
-    aspect-ratio: 16 / 9;
-  }
-
-  .remote-video {
-    width: 100%;
-    height: 100%;
-  }
 }
 </style>

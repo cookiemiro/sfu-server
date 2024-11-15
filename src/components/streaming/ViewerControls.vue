@@ -8,7 +8,7 @@
         <div class="controls-bar">
           <h3>시청자 화면</h3>
           <div class="control-buttons">
-            <button @click="$emit('leave')" class="leave-button">방 나가기</button>
+            <button @click="handleLeave" class="leave-button">방 나가기</button>
           </div>
         </div>
       </div>
@@ -18,40 +18,54 @@
 
 <script setup>
 import { ref } from 'vue'
-import RemoteMedia from './RemoteMedia.vue' // import 추가
+import RemoteMedia from './RemoteMedia.vue'
 
 const remoteRef = ref(null)
 
-defineEmits(['leave'])
-defineExpose({ remoteRef })
+const handleLeave = () => {
+  if (remoteRef.value?.videoRef) {
+    remoteRef.value.videoRef.srcObject = null
+  }
+  emit('leave')
+}
+
+const emit = defineEmits(['leave'])
+
+defineExpose({
+  remoteRef,
+})
 </script>
 
 <style scoped>
 .viewer-container {
   width: 100%;
   height: 100%;
+  display: flex;
+  flex-direction: column;
   background-color: #f8f9fa;
   border-radius: 0.5rem;
   padding: 1rem;
-  box-sizing: border-box;
 }
 
 .video-wrapper {
   position: relative;
   width: 100%;
   height: 100%;
+  display: flex;
+  flex-direction: column;
   background: #000;
   border-radius: 8px;
   overflow: hidden;
-  box-sizing: border-box;
 }
 
 .video-container {
+  position: relative;
   width: 100%;
   height: 100%;
   display: flex;
   align-items: center;
   justify-content: center;
+  overflow: hidden;
 }
 
 .controls-overlay {
@@ -69,6 +83,11 @@ defineExpose({ remoteRef })
   justify-content: space-between;
   align-items: center;
   color: white;
+}
+
+.control-buttons {
+  display: flex;
+  gap: 0.5rem;
 }
 
 .leave-button {
@@ -89,6 +108,10 @@ defineExpose({ remoteRef })
 @media (max-width: 768px) {
   .viewer-container {
     padding: 0.5rem;
+  }
+
+  .video-wrapper {
+    aspect-ratio: 16 / 9;
   }
 
   .controls-bar h3 {

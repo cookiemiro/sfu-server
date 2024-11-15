@@ -100,7 +100,6 @@ onBeforeUnmount(() => {
   width: 100%;
   height: 100vh;
   padding: 1rem;
-  overflow: hidden;
 }
 
 .grid-container {
@@ -115,7 +114,6 @@ onBeforeUnmount(() => {
   background-color: #f8f9fa;
   border-radius: 0.5rem;
   padding: 1rem;
-  overflow: hidden;
 }
 
 .chat-area {
@@ -124,7 +122,6 @@ onBeforeUnmount(() => {
   padding: 1rem;
   display: flex;
   flex-direction: column;
-  overflow: hidden;
 }
 
 .product-info-area,
@@ -134,7 +131,6 @@ onBeforeUnmount(() => {
   padding: 1rem;
   display: flex;
   flex-direction: column;
-  overflow: hidden;
 }
 
 .area-header {
@@ -143,7 +139,6 @@ onBeforeUnmount(() => {
   margin-bottom: 1rem;
   padding-bottom: 0.5rem;
   border-bottom: 1px solid #dee2e6;
-  flex-shrink: 0;
 }
 
 .scrollable-content {
@@ -173,65 +168,13 @@ onBeforeUnmount(() => {
 
 /* 반응형 디자인 */
 @media (max-width: 768px) {
-  .streaming-layout {
-    padding: 0.5rem;
-    height: 100vh;
-    overflow-y: auto;
-  }
-
   .grid-container {
-    display: flex;
-    flex-direction: column;
-    height: auto;
-    gap: 0.5rem;
+    grid-template-columns: 1fr;
+    grid-template-rows: auto auto auto auto;
   }
 
-  .streaming-area {
-    width: 100%;
-    aspect-ratio: 16/9; /* 비디오 비율 유지 */
-    min-height: auto;
-  }
-
-  .chat-area {
-    width: 100%;
-    height: 400px; /* 채팅 영역 고정 높이 */
-    min-height: 400px;
-    max-height: 400px;
-  }
-
-  .product-info-area,
-  .stream-summary-area {
-    width: 100%;
-    height: 300px; /* 각 영역 고정 높이 */
-    min-height: 300px;
-    max-height: 300px;
-  }
-
-  .area-header {
-    font-size: 1.1rem;
-    margin-bottom: 0.5rem;
-    padding-bottom: 0.5rem;
-  }
-
-  /* 모바일에서 마지막 요소 아래 여백 추가 */
-  .stream-summary-area {
-    margin-bottom: 1rem;
-  }
-}
-
-/* 더 작은 화면에서의 높이 조정 */
-@media (max-width: 480px) {
-  .chat-area {
-    height: 300px;
-    min-height: 300px;
-    max-height: 300px;
-  }
-
-  .product-info-area,
-  .stream-summary-area {
-    height: 250px;
-    min-height: 250px;
-    max-height: 250px;
+  .streaming-layout {
+    /* padding: 0.5rem; */
   }
 }
 </style>

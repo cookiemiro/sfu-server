@@ -46,6 +46,15 @@ const cleanupPeer = (socket, peerId) => {
 io.on('connection', (socket) => {
   console.log('Client connected:', socket.id)
 
+  socket.on('message', (data) => {
+    // 메시지를 해당 방의 다른 사용자들에게 브로드캐스트
+    console.log(data.com)
+    socket.to(data.room).emit('new-message', {
+      username: data.username,
+      content: data.content,
+    })
+  })
+
   // 방 참여 요청 처리
   socket.on('join-room', async ({ roomId, peerId }) => {
     try {

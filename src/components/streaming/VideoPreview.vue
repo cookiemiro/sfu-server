@@ -1,11 +1,12 @@
+<!-- VideoPreview.vue -->
 <template>
   <div class="video-preview">
-    <video ref="videoEl" class="preview-video" autoplay playsinline muted></video>
+    <video ref="videoRef" class="preview-video" autoplay playsinline muted></video>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted, watch } from 'vue'
+import { ref, onMounted, watch, onBeforeUnmount } from 'vue'
 
 const props = defineProps({
   stream: {
@@ -16,7 +17,7 @@ const props = defineProps({
 
 const videoRef = ref(null)
 
-// Stream이 변경될 때마다 srcObject 업데이트
+// stream이 변경될 때마다 video 엘리먼트에 연결
 watch(
   () => props.stream,
   (newStream) => {
@@ -27,13 +28,27 @@ watch(
   { immediate: true },
 )
 
-// 컴포넌트 노출
-defineExpose({ videoRef })
+// 컴포넌트가 마운트될 때 stream 연결
+onMounted(() => {
+  if (videoRef.value && props.stream) {
+    videoRef.value.srcObject = props.stream
+  }
+})
+
+// cleanup on unmount
+onBeforeUnmount(() => {
+  if (videoRef.value) {
+    videoRef.value.srcObject = null
+  }
+})
+
+defineExpose({
+  videoRef,
+})
 </script>
 
 <style scoped>
 .video-preview {
-  position: relative;
   width: 100%;
   height: 100%;
   display: flex;
@@ -42,21 +57,9 @@ defineExpose({ videoRef })
 }
 
 .preview-video {
-  max-width: 100%;
-  max-height: 100%;
-  width: auto;
-  height: auto;
+  width: 100%;
+  height: 100%;
   object-fit: contain;
-}
-
-@media (max-width: 768px) {
-  .video-preview {
-    aspect-ratio: 16 / 9;
-  }
-
-  .preview-video {
-    width: 100%;
-    height: 100%;
-  }
+  background: #000;
 }
 </style>
