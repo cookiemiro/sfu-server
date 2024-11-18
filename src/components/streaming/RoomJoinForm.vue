@@ -10,6 +10,12 @@
       <option value="host">호스트</option>
       <option value="viewer">시청자</option>
     </select>
+    <input
+      type="text"
+      placeholder="유저명"
+      :value="userName"
+      @input="$emit('update:userName', $event.target.value)"
+    />
     <button @click="$emit('join')">Join Room</button>
   </div>
 </template>
@@ -24,9 +30,13 @@ const props = defineProps({
     type: String,
     default: 'viewer', // 기본값을 'host'로 설정
   },
+  userName: {
+    type: String,
+    default: '',
+  },
 })
 
-defineEmits(['update:roomId', 'update:userRole', 'join'])
+defineEmits(['update:roomId', 'update:userRole', 'join', 'update:userName'])
 </script>
 
 <style scoped>

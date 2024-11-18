@@ -1,7 +1,12 @@
 <template>
   <div class="streaming-layout">
     <div v-if="!joined">
-      <room-join-form v-model:room-id="roomId" v-model:user-role="userRole" @join="joinRoom" />
+      <room-join-form
+        v-model:room-id="roomId"
+        v-model:user-role="userRole"
+        v-model:user-name="userName"
+        @join="joinRoom"
+      />
     </div>
 
     <div v-else class="grid-container">
@@ -23,7 +28,7 @@
       <!-- Chat Area -->
       <div class="chat-area">
         <div class="area-header">실시간 채팅</div>
-        <chat-component :roomId="roomId" :socket="socket" />
+        <chat-component :roomId="roomId" :socket="socket" :user-name="userName" />
       </div>
 
       <!-- Product Info Area -->
@@ -50,7 +55,7 @@ import ChatComponent from './ChatComponent.vue'
 import ProductInfoComponent from './ProductInfoComponent.vue'
 import StreamSummaryComponent from './StreamSummaryComponent.vue'
 
-import { onMounted, onBeforeUnmount } from 'vue'
+import { ref, onMounted, onBeforeUnmount } from 'vue'
 import { useStreaming } from '../composables/useStreaming'
 import RoomJoinForm from '@/components/streaming/RoomJoinForm.vue'
 import HostControls from '@/components/streaming/HostControls.vue'
@@ -58,6 +63,8 @@ import ViewerControls from '@/components/streaming/ViewerControls.vue'
 import ViewerList from '@/components/streaming/ViewerList.vue'
 import VideoPreview from '@/components/streaming/VideoPreview.vue'
 import RemoteMedia from '@/components/streaming/RemoteMedia.vue'
+
+const userName = ref('')
 
 const {
   // refs
