@@ -113,7 +113,7 @@ onBeforeUnmount(() => {
 .grid-container {
   display: grid;
   grid-template-columns: 60% 40%;
-  grid-template-rows: 70% 30%;
+  grid-template-rows: 60% 40%;
   gap: 1rem;
   height: calc(100vh - 2rem);
 }
