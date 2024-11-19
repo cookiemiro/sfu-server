@@ -2,7 +2,7 @@
   <div class="viewer-container">
     <div class="video-wrapper">
       <div class="video-container">
-        <RemoteMedia ref="remoteRef" />
+        <RemoteMedia ref="remoteRef" :set-remote-media-el="setRemoteMediaEl" />
       </div>
       <div class="controls-overlay">
         <div class="controls-bar">
@@ -19,6 +19,13 @@
 <script setup>
 import { ref } from 'vue'
 import RemoteMedia from './RemoteMedia.vue'
+
+const props = defineProps({
+  setRemoteMediaEl: {
+    type: Function,
+    required: true,
+  },
+})
 
 const remoteRef = ref(null)
 

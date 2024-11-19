@@ -25,17 +25,17 @@ export const useStreaming = () => {
     cleanupProducers,
     cleanup,
     consume,
+    setRemoteMediaEl,
   } = useMediasoup()
 
   // 시청자 비디오 엘리먼트 연결
   watch(
     () => remoteMediaRef.value,
     (el) => {
-      if (el?.videoRef) {
+      if (el) {
+        // DOM 요소가 마운트된 후에 setRemoteMediaEl 호출
         nextTick(() => {
-          if (window.remoteVideo) {
-            window.remoteVideo = el.videoRef
-          }
+          setRemoteMediaEl(el.remoteMediaRef)
         })
       }
     },
@@ -57,6 +57,14 @@ export const useStreaming = () => {
     if (localVideoRef.value?.videoRef) {
       localVideoRef.value.videoRef.srcObject = null
     }
+
+    if (socket.value) {
+      socket.value.emit('stop-camera', {
+        roomId: roomId.value,
+        peerId: socket.value.id,
+      })
+    }
+
     cleanupProducers()
   }
 
@@ -119,6 +127,8 @@ export const useStreaming = () => {
 
       peers.value = peerIds.filter((id) => id !== socket.value.id)
 
+      console.log('Existing producers:', existingProducers)
+
       for (const producerInfo of existingProducers) {
         await consume(producerInfo)
       }
@@ -179,5 +189,6 @@ export const useStreaming = () => {
     startCamera,
     stopCamera,
     initializeSocket,
+    setRemoteMediaEl,
   }
 }

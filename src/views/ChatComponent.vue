@@ -70,7 +70,7 @@ const connect = () => {
       connectionStatus.value = 'error'
       isConnecting.value = false
     }
-  }, 5000) // 5초 후에도 연결이 안되면 실패로 처리
+  }, 2000) // 5초 후에도 연결이 안되면 실패로 처리
 
   client.activate()
   stompClient.value = client

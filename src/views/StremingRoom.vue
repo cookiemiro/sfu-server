@@ -22,7 +22,7 @@
           <video-preview v-if="localStream" ref="localVideoRef" :stream="localStream" />
         </host-controls>
 
-        <viewer-controls v-else @leave="leaveRoom" />
+        <viewer-controls v-else @leave="leaveRoom" :set-remote-media-el="setRemoteMediaEl" />
       </div>
 
       <!-- Chat Area -->
@@ -55,7 +55,7 @@ import ChatComponent from './ChatComponent.vue'
 import ProductInfoComponent from './ProductInfoComponent.vue'
 import StreamSummaryComponent from './StreamSummaryComponent.vue'
 
-import { ref, onMounted, onBeforeUnmount } from 'vue'
+import { ref, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import { useStreaming } from '../composables/useStreaming'
 import RoomJoinForm from '@/components/streaming/RoomJoinForm.vue'
 import HostControls from '@/components/streaming/HostControls.vue'
@@ -70,7 +70,7 @@ const {
   // refs
   // 컴포넌트
   localVideoRef,
-  remoteMediaRef,
+  // remoteMediaRef,
 
   // states
   socket,
@@ -88,11 +88,22 @@ const {
   toggleCamera,
   // toggleScreenShare,
   initializeSocket,
+  setRemoteMediaEl,
 } = useStreaming()
 
 onMounted(() => {
   initializeSocket()
+
+  // nextTick => DOM 업데이트 이후에 실행되는 콜백 함수
+  // nextTick(() => {
+  //   const remoteMediaRef = viewerControlsRef.value?.remoteRef?.remoteMediaRef?.value
+  //   setRemoteMediaEl(remoteMediaRef)
+  // })
+
+  //  viewerControlsRef.value?.remoteRef?.remoteMediaRef?.value
 })
+
+// console.log('Remote Media Ref:', remoteMediaRef)
 
 onBeforeUnmount(() => {
   if (joined.value) {

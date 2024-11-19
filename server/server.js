@@ -46,6 +46,33 @@ const cleanupPeer = (socket, peerId) => {
 io.on('connection', (socket) => {
   console.log('Client connected:', socket.id)
 
+  socket.on('stop-camera', async ({ roomId, peerId }) => {
+    try {
+      const room = mediasoupService.getRoom(roomId)
+      if (!room) throw new Error('Room not found')
+
+      const peer = room.getPeer(peerId)
+      if (!peer) throw new Error('Peer not found')
+
+      // 해당 피어의 모든 프로듀서 정리
+      for (const [producerId, producer] of peer.producers) {
+        producer.close()
+        peer.producers.delete(producerId)
+
+        // 다른 피어들에게 프로듀서가 제거되었음을 알림
+        socket.to(roomId).emit('producer-closed', {
+          producerId,
+          peerId,
+        })
+      }
+
+      console.log(`Camera stopped for peer ${peerId} in room ${roomId}`)
+    } catch (error) {
+      console.error('Error stopping camera:', error)
+      socket.emit('error', { message: error.message })
+    }
+  })
+
   socket.on('message', (data) => {
     // 메시지를 해당 방의 다른 사용자들에게 브로드캐스트
     console.log(data.com)

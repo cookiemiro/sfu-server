@@ -1,4 +1,4 @@
-import { ref } from 'vue'
+import { ref, watch } from 'vue'
 import { toRaw } from 'vue'
 import * as mediasoupClient from 'mediasoup-client'
 import { io } from 'socket.io-client'
@@ -17,11 +17,12 @@ export const useMediasoup = () => {
   const localStream = ref(null)
   const videoProducer = ref(null)
   const audioProducer = ref(null)
-  const screenProducer = ref(null)
+  // const screenProducer = ref(null)
   const userRole = ref('viewer')
   const remoteMediaEl = ref(null)
   const mainVideoElement = ref(null)
   const currentConsumers = ref(new Map())
+  const consumers = ref(new Map())
 
   // const initializeSocket = () => {
   //   socket.value = io(SERVER_URL)
@@ -75,6 +76,31 @@ export const useMediasoup = () => {
 
       socket.value.on('viewers-updated', (updatedViewers) => {
         viewers.value = updatedViewers
+      })
+
+      socket.value.on('producer-closed', async ({ producerId, peerId }) => {
+        console.log(`Producer ${producerId} from peer ${peerId} was closed`)
+
+        // 해당 producer에 연결된 consumer 찾기
+        const consumer = consumers.value.get(producerId)
+        if (consumer) {
+          // consumer 정리
+          consumer.close()
+          consumers.value.delete(producerId)
+
+          // consumer와 연결된 video/audio 엘리먼트 찾기 및 정리
+          const mediaElement = document.getElementById(`consumer-${producerId}`)
+          if (mediaElement) {
+            const stream = mediaElement.srcObject
+            if (stream) {
+              stream.getTracks().forEach((track) => track.stop())
+            }
+            mediaElement.srcObject = null
+            mediaElement.remove()
+          }
+
+          console.log(`Cleaned up consumer for producer ${producerId}`)
+        }
       })
 
       return socket.value
@@ -185,7 +211,7 @@ export const useMediasoup = () => {
   }
 
   const cleanupProducers = () => {
-    ;[videoProducer, audioProducer, screenProducer].forEach((producer) => {
+    ;[videoProducer, audioProducer].forEach((producer) => {
       if (producer.value) {
         try {
           producer.value.close()
@@ -209,6 +235,11 @@ export const useMediasoup = () => {
 
   const cleanup = () => {
     try {
+      consumers.value.forEach((consumer) => {
+        consumer.close()
+      })
+      consumers.value.clear()
+
       // Consumers 정리
       currentConsumers.value.forEach(({ consumer }) => {
         try {
@@ -262,7 +293,7 @@ export const useMediasoup = () => {
       device.value = null
 
       // window 객체의 remoteVideo 제거
-      delete window.remoteVideo
+      // delete window.remoteVideo
     } catch (error) {
       console.error('Error during cleanup:', error)
     }
@@ -315,45 +346,11 @@ export const useMediasoup = () => {
         appData: { peerId, producerId },
       })
 
+      consumers.value.set(producerId, consumer)
+
       await consumer.resume()
 
-      // 비디오 스트림 처리
-      if (consumer.kind === 'video') {
-        const stream = new MediaStream([consumer.track])
-        const videoElement = window.remoteVideo
-        if (videoElement) {
-          videoElement.srcObject = stream
-          try {
-            await videoElement.play()
-          } catch (error) {
-            console.warn('Autoplay failed, trying with muted:', error)
-            videoElement.muted = true
-            await videoElement.play()
-            videoElement.muted = false
-          }
-        }
-      }
-
-      // 오디오 스트림 처리
-      if (consumer.kind === 'audio') {
-        const audioElement = document.createElement('audio')
-        audioElement.autoplay = true
-        audioElement.srcObject = new MediaStream([consumer.track])
-        document.body.appendChild(audioElement)
-
-        // cleanup when consumer ends
-        consumer.on('ended', () => {
-          audioElement.remove()
-        })
-      }
-
-      currentConsumers.value.set(consumer.id, { consumer, consumerData })
-
-      consumer.on('ended', () => {
-        currentConsumers.value.delete(consumer.id)
-      })
-
-      return consumer
+      renderRemoteMedia(consumer, consumerData)
     } catch (error) {
       console.error(`Error consuming ${kind}:`, error)
       throw new Error(`미디어 수신에 실패했습니다: ${kind}`)
@@ -373,7 +370,7 @@ export const useMediasoup = () => {
       video.id = 'main-stream'
       video.autoplay = true
       video.playsInline = true
-      video.className = 'w-full h-full object-cover'
+      video.className = 'w-full h-full object-cover remote-video'
       mainVideoElement.value = video
       remoteMediaEl.value.appendChild(video)
     }
@@ -478,6 +475,43 @@ export const useMediasoup = () => {
     }
   }
 
+  const handleReconnection = async () => {
+    try {
+      // 서버에 현재 방의 producer 목록을 요청
+      socket.value.emit('get-producers', {
+        roomId: roomId.value,
+        peerId: socket.value.id,
+      })
+
+      // 서버로부터 producer 목록을 받아서 처리
+      socket.value.on('producers-list', async ({ producers }) => {
+        console.log('Received producers list:', producers)
+
+        for (const producer of producers) {
+          const { producerId, peerId, kind } = producer
+
+          // 이미 consume 중인 producer인지 확인
+          const isAlreadyConsuming = Array.from(currentConsumers.value.entries()).some(
+            ([_, { consumerData }]) => consumerData.producerId === producerId,
+          )
+
+          if (!isAlreadyConsuming) {
+            try {
+              const consumer = await consume({ producerId, peerId, kind })
+              if (consumer) {
+                await renderRemoteMedia(consumer, { producerId, peerId })
+              }
+            } catch (error) {
+              console.error(`Failed to consume ${kind} from peer ${peerId}:`, error)
+            }
+          }
+        }
+      })
+    } catch (error) {
+      console.error('Error during reconnection:', error)
+    }
+  }
+
   return {
     socket,
     device,
@@ -499,6 +533,7 @@ export const useMediasoup = () => {
     consume,
     setRemoteMediaEl,
     currentConsumers,
+    handleReconnection,
     cleanup,
   }
 }
