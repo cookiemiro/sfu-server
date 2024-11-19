@@ -25,7 +25,8 @@ const connect = () => {
   connectionStatus.value = 'connecting'
 
   const client = new Client({
-    brokerURL: 'ws://127.0.0.1:8080/ws',
+    // brokerURL: 'ws://127.0.0.1:8080/ws',
+    brokerURL: import.meta.env.VITE_WEBSOCKET_URI,
     debug: function (str) {
       console.log(str)
     },

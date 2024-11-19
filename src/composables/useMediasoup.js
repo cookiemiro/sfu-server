@@ -3,7 +3,7 @@ import { toRaw } from 'vue'
 import * as mediasoupClient from 'mediasoup-client'
 import { io } from 'socket.io-client'
 
-const SERVER_URL = 'http://127.0.0.1:4000'
+const SERVER_URL = import.meta.env.VITE_SERVER_URI
 
 export const useMediasoup = () => {
   const socket = ref(null)
