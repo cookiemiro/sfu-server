@@ -70,7 +70,7 @@ const {
   // refs
   // 컴포넌트
   localVideoRef,
-  // remoteMediaRef,
+  remoteMediaRef,
 
   // states
   socket,
@@ -97,7 +97,7 @@ onMounted(() => {
   // nextTick => DOM 업데이트 이후에 실행되는 콜백 함수
   // nextTick(() => {
   //   const remoteMediaRef = viewerControlsRef.value?.remoteRef?.remoteMediaRef?.value
-  //   setRemoteMediaEl(remoteMediaRef)
+  // setRemoteMediaEl(remoteMediaRef)
   // })
 
   //  viewerControlsRef.value?.remoteRef?.remoteMediaRef?.value

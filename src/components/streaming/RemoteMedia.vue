@@ -10,6 +10,8 @@ import { ref, onMounted } from 'vue'
 // const videoRef = ref(null)
 const remoteMediaRef = ref(null)
 
+console.log(remoteMediaRef)
+
 const props = defineProps({
   setRemoteMediaEl: {
     type: Function,
@@ -18,9 +20,11 @@ const props = defineProps({
 })
 
 onMounted(() => {
-  if (remoteMediaRef.value) {
-    props.setRemoteMediaEl(remoteMediaRef.value)
-  }
+  // if (!remoteMediaRef.value) {
+  //   props.setRemoteMediaEl(remoteMediaRef.value)
+  // }
+
+  props.setRemoteMediaEl(remoteMediaRef.value)
 })
 
 // onMounted(() => {

@@ -378,6 +378,8 @@ export const useMediasoup = () => {
 
   const renderRemoteMedia = async (consumer, consumerData) => {
     if (!remoteMediaEl.value) {
+      console.log(remoteMediaEl.value)
+
       console.warn('Remote media element not ready, retrying in 100ms...')
       setTimeout(() => {
         if (remoteMediaEl.value) {

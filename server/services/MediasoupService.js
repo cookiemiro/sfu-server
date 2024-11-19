@@ -1,6 +1,7 @@
 import mediasoup from 'mediasoup'
 import { mediaCodecs, webRtcTransportOptions } from '../config/mediasoup.config.js'
 import { Room } from '../models/Room.js'
+import process from 'process'
 
 export class MediasoupService {
   constructor() {

@@ -5,12 +5,15 @@ import { Server } from 'socket.io'
 import { MediasoupService } from './services/MediasoupService.js'
 import process from 'process'
 import { Peer } from './models/Peer.js'
+import dotenv from 'dotenv'
 
 const app = express()
 const server = http.createServer(app)
+dotenv.config()
+
 const io = new Server(server, {
   cors: {
-    origin: 'https://127.0.0.1:5500', // Vite 기본 포트
+    origin: process.env.CORS_ORIGIN, // Vite 기본 포트
     methods: ['GET', 'POST'],
     credentials: true,
   },

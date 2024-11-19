@@ -1,3 +1,12 @@
+import dotenv from 'dotenv'
+import process from 'process'
+dotenv.config()
+
+// 환경변수가 없을 경우 기본값 설정
+const ANNOUNCED_IP = process.env.ANNOUNCED_IP || '127.0.0.1'
+
+console.log('Using announced IP:', ANNOUNCED_IP)
+
 export const mediaCodecs = [
   {
     kind: 'audio',
@@ -29,7 +38,7 @@ export const webRtcTransportOptions = {
   listenIps: [
     {
       ip: '0.0.0.0', // 모든 IP에서 수신
-      announcedIp: '127.0.0.1', // 클라이언트에게 알려질 IP
+      announcedIp: ANNOUNCED_IP, // 클라이언트에게 알려질 IP
     },
   ],
   enableUdp: true,
