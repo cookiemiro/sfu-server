@@ -5,77 +5,21 @@ on:
   pull_request:
     types: 
       - closed
-
 jobs:
-  build-and-deploy:
+  build:
     runs-on: ubuntu-latest
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@v3
-
-    - name: Setup Node.js
-      uses: actions/setup-node@v4
-      with:
-        node-version: '20'
-        cache: 'npm'
-        cache-dependency-path: '**/package-lock.json'
-
-    - name: Install dependencies
-      run: | 
-        npm install
-        npm install @rollup/rollup-linux-x64-gnu
-
-    - name: Create env file
-      run: |
-        echo "VITE_SERVER_URI=${{ secrets.API_URL }}" >> .env
-        echo "VITE_WEBSOCKET_URI=${{ secrets.WEBSOCKET_URI }}" >> .env
-
-    - name: Build Vue project
-      run: npm run build
-      env: 
-        NODE_ENV: production
-        ROLLUP_NATIVE_BUILD: false
-
-    # SSH 키 설정을 더 엄격하게 수정
-    - name: Install SSH key
-      run: |
-        mkdir -p ~/.ssh
-        echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/deploy_key
-        chmod 600 ~/.ssh/deploy_key
-        eval $(ssh-agent -s)
-        ssh-add ~/.ssh/deploy_key
-
-    # SSH 설정 파일 생성
-    - name: Configure SSH
-      run: |
-        echo "Host ${{ secrets.SERVER_HOST }}
-          HostName ${{ secrets.SERVER_HOST }}
-          User ${{ secrets.SERVER_USER }}
-          IdentityFile ~/.ssh/deploy_key
-          StrictHostKeyChecking no
-          UserKnownHostsFile=/dev/null" > ~/.ssh/config
-        chmod 600 ~/.ssh/config
-
-    # SSH 연결 테스트 (디버그 모드)
-    - name: Test SSH Connection
-      run: |
-        ssh -v -i ~/.ssh/deploy_key ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} 'echo "Connection test"'
-
-    # rsync 명령어 수정
-    - name: Deploy to server
-      run: |
-        rsync -avz --delete \
-          -e "ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null" \
-          ./dist/ \
-          ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}:/root/sfu-server
-
-    # Nginx 캐시 제거 및 재시작
-    - name: Clear Nginx cache and restart
-      run: |
-        ssh -i ~/.ssh/deploy_key \
-          -o StrictHostKeyChecking=no \
-          -o UserKnownHostsFile=/dev/null \
-          ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} '
-          sudo rm -rf /var/cache/nginx/* &&
-          sudo systemctl restart nginx
-        '
+      - name: SSH-deploy
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{secrets.SERVER_HOST}}
+          username: ${{secrets.SERVER_USER}}
+          password: ${{secrets.SSH_PRIVATE_KEY}}
+          port: 22
+          script: |
+            whoami
+            cd /root/sfu-server
+            git pull origin main
+            npm install --force
+            npm run build
+            nginx -s reload
