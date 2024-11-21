@@ -19,6 +19,7 @@ jobs:
       with:
         node-version: '20'  # Node.js 버전 지정
         cache: 'npm'       # npm 캐시 사용
+        cache-dependency-path: '**/package-lock.json'
 
     - name: Install dependencies
       run: |
