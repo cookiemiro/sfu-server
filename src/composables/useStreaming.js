@@ -1,3 +1,5 @@
+// useStreaming.js
+
 import { ref, watch, nextTick, onBeforeUnmount } from 'vue'
 import { useMediasoup } from './useMediasoup'
 
@@ -9,6 +11,7 @@ export const useStreaming = () => {
     socket,
     device,
     sendTransport,
+    recvTransport,
     joined,
     roomId,
     peers,
@@ -23,12 +26,12 @@ export const useStreaming = () => {
     handleMediaStream,
     createProducers,
     cleanupProducers,
+    cleanupConsumers,
     cleanup,
     consume,
     setRemoteMediaEl,
   } = useMediasoup()
 
-  // 시청자 비디오 엘리먼트 연결
   watch(
     () => remoteMediaRef.value,
     (el) => {
@@ -42,7 +45,6 @@ export const useStreaming = () => {
     { immediate: true },
   )
 
-  // 컴포넌트 언마운트 시 정리
   onBeforeUnmount(() => {
     if (joined.value) {
       leaveRoom()
@@ -81,6 +83,32 @@ export const useStreaming = () => {
     }
   }
 
+  const cleanupBeforeLeave = () => {
+    // 기존 미디어 스트림 정리
+    stopCamera()
+
+    // Consumer 정리
+    cleanupConsumers()
+
+    // Transport 정리
+    // if (sendTransport.value) {
+    //   sendTransport.value.close()
+    // }
+    // if (recvTransport.value) {
+    //   recvTransport.value.close()
+    // }
+
+    // 비디오 엘리먼트 정리
+    if (window.remoteVideo) {
+      window.remoteVideo.srcObject = null
+    }
+
+    // Device 정리
+    if (device.value) {
+      device.value = null
+    }
+  }
+
   const joinRoom = async () => {
     if (!socket.value) {
       await initializeSocket()
@@ -93,6 +121,7 @@ export const useStreaming = () => {
       socket.value.emit('join-room', {
         roomId: roomId.value,
         peerId: socket.value.id,
+        userRole: userRole.value,
       })
 
       socket.value.on('room-joined', async (response) => {
@@ -115,25 +144,70 @@ export const useStreaming = () => {
     existingProducers,
   }) => {
     try {
+      console.log('Setting up room with existing producers:', existingProducers)
+
+      // Device와 Transport 새로 생성
       const newDevice = await createDevice(rtpCapabilities)
-      createTransport(newDevice, sendTransportOptions, 'send')
+
+      // viewer인 경우 sendTransport는 생성하지 않음
+      if (userRole.value === 'host') {
+        createTransport(newDevice, sendTransportOptions, 'send')
+      }
       createTransport(newDevice, recvTransportOptions, 'recv')
 
-      socket.value.on('new-producer', consume)
+      socket.value.on('new-producer', async (producerInfo) => {
+        console.log('New producer received:', producerInfo)
+        try {
+          await consume(producerInfo)
+        } catch (error) {
+          console.error('Error consuming new producer:', error)
+        }
+      })
+
+      socket.value.on('producer-closed', ({ producerId }) => {
+        console.log('Producer closed:', producerId)
+        // 해당 producer의 모든 consumer 찾아서 정리
+        const consumersToRemove = Array.from(currentConsumers.value.entries()).filter(
+          ([_, { consumerData }]) => consumerData.producerId === producerId,
+        )
+
+        consumersToRemove.forEach(([consumerId, { consumer }]) => {
+          console.log('Closing consumer for closed producer:', consumerId)
+          consumer.close()
+          currentConsumers.value.delete(consumerId)
+        })
+      })
 
       if (userRole.value === 'host') {
         await startCamera()
+      } else if (existingProducers && existingProducers.length > 0) {
+        // viewer인 경우 기존 producer 소비
+        console.log('Processing existing producers:', existingProducers)
+        const uniqueProducers = existingProducers.reduce((acc, producer) => {
+          const key = `${producer.producerId}-${producer.kind}`
+          if (!acc[key]) {
+            acc[key] = producer
+          }
+          return acc
+        }, {})
+
+        for (const producer of Object.values(uniqueProducers)) {
+          try {
+            await consume(producer)
+          } catch (error) {
+            console.error('Error consuming existing producer:', error)
+          }
+        }
       }
 
       peers.value = peerIds.filter((id) => id !== socket.value.id)
+      joined.value = true
 
       console.log('Existing producers:', existingProducers)
 
       for (const producerInfo of existingProducers) {
         await consume(producerInfo)
       }
-
-      joined.value = true
     } catch (error) {
       console.error('Error in setupRoom:', error)
       alert('방 설정에 실패했습니다.')
@@ -143,8 +217,16 @@ export const useStreaming = () => {
 
   const leaveRoom = async () => {
     try {
-      // 먼저 모든 미디어 및 연결 정리
-      cleanup()
+      // 방을 나가기 전에 모든 미디어 및 연결 정리
+      cleanupBeforeLeave()
+
+      // 서버에 방 나가기 알림
+      if (socket.value) {
+        socket.value.emit('leave-room', {
+          roomId: roomId.value,
+          peerId: socket.value.id,
+        })
+      }
 
       // Socket 연결 재설정
       if (socket.value) {

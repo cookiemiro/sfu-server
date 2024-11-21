@@ -18,7 +18,7 @@
 </template>
 
 <script setup>
-defineProps({
+const props = defineProps({
   localStream: {
     type: MediaStream,
     required: false,
@@ -26,6 +26,10 @@ defineProps({
   screenProducer: {
     type: Object,
     required: false,
+  },
+  userRole: {
+    type: String,
+    default: 'host',
   },
 })
 

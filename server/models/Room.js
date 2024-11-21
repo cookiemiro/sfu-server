@@ -3,10 +3,14 @@ export class Room {
     this.id = id
     this.router = router
     this.peers = new Map() // peerId -> Peer
+    this.hostPeerId = null // producer(host)의 peerId 저장
   }
 
-  addPeer(peer) {
+  addPeer(peer, isHost = false) {
     this.peers.set(peer.id, peer)
+    if (isHost) {
+      this.hostPeerId = peer.id
+    }
   }
 
   removePeer(peerId) {
@@ -19,15 +23,18 @@ export class Room {
 
   getProducerList() {
     const producerList = []
-    this.peers.forEach((peer, peerId) => {
-      peer.producers.forEach((producer) => {
+    const hostPeer = this.hostPeerId ? this.peers.get(this.hostPeerId) : null
+
+    if (hostPeer) {
+      hostPeer.producers.forEach((producer) => {
         producerList.push({
           producerId: producer.id,
-          peerId,
+          peerId: this.hostPeerId,
           kind: producer.kind,
         })
       })
-    })
+    }
+
     return producerList
   }
 

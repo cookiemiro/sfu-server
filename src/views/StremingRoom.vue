@@ -16,7 +16,8 @@
           v-if="userRole === 'host'"
           :local-stream="localStream"
           :screen-producer="screenProducer"
-          @leave="leaveRoom"
+          :user-role="userRole"
+          @leave="handleHostLeave"
           @toggle-camera="toggleCamera"
         >
           <video-preview v-if="localStream" ref="localVideoRef" :stream="localStream" />
@@ -79,7 +80,7 @@ const {
   peers,
   viewers,
   localStream,
-  userRole,
+  userRole: userRole,
   screenProducer,
 
   // methods
@@ -111,6 +112,14 @@ onBeforeUnmount(() => {
   }
   socket.value?.disconnect()
 })
+
+const handleViewerLeave = () => {
+  leaveRoom() // 기존 leaveRoom 함수 호출
+}
+
+const handleHostLeave = () => {
+  leaveRoom()
+}
 </script>
 
 <style scoped>

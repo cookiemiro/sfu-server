@@ -1,0 +1,70 @@
+name: Vue.js CI/CD with Nginx
+
+on:
+  push:
+    branches: [ "main" ]  # main 브랜치에 push가 발생했을 때 실행
+  pull_request:
+    branches: [ "main" ]  # main 브랜치로의 PR이 생성됐을 때 실행
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest  # Ubuntu 환경에서 실행
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v3  # 저장소 체크아웃
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4  # Node.js 설정 => version 4 사용
+      with:
+        node-version: '20'  # Node.js 버전 지정
+        cache: 'npm'       # npm 캐시 사용
+        cache-dependency-path: '**/package-lock.json'
+
+    - name: Install dependencies
+      run: |
+          if [ -f package-lock.json ]; then
+            npm ci
+          else
+            npm install
+          fi
+
+    - name: Build Vue project
+      run: npm run build   # Vue 프로젝트 빌드
+      env:
+        NODE_ENV: production
+
+    - name: Setup SSH
+      uses: webfactory/ssh-agent@v0.7.0
+      with:
+        ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+
+    - name: Add known hosts
+      run: |
+        mkdir -p ~/.ssh
+        ssh-keyscan -H ${{ secrets.HOST }} >> ~/.ssh/known_hosts
+
+    - name: Deploy to server
+      run: |
+        rsync -avz --delete ./dist/ ${{ secrets.USERNAME }}@${{ secrets.HOST }}:/root/sfu-server
+        
+    #- name: Restart Nginx
+    #  run: |
+    #    ssh ${{ secrets.USERNAME }}@${{ secrets.HOST }} 'sudo systemctl restart nginx'
+
+    # Nginx 캐시 삭제
+    - name: Clear Nginx cache
+      run: |
+        ssh ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} '
+          sudo rm -rf /var/cache/nginx/* &&
+          sudo systemctl restart nginx
+        '
+        
+    # - name: Notify slack
+    #   if: always()
+    #   uses: 8398a7/action-slack@v3
+    #   with:
+    #     status: ${{ job.status }}
+    #     fields: repo,message,commit,author,action,ref
+    #   env:
+    #     SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}

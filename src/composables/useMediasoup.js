@@ -24,28 +24,8 @@ export const useMediasoup = () => {
   const currentConsumers = ref(new Map())
   const consumers = ref(new Map())
 
-  // const initializeSocket = () => {
-  //   socket.value = io(SERVER_URL)
-
-  //   socket.value.on('connect', () => {
-  //     console.log('Connected to server:', socket.value.id)
-  //   })
-
-  //   socket.value.on('new-peer', ({ peerId }) => {
-  //     peers.value.push(peerId)
-  //   })
-
-  //   socket.value.on('peer-left', ({ peerId }) => {
-  //     peers.value = peers.value.filter((id) => id !== peerId)
-  //   })
-
-  //   socket.value.on('viewers-updated', (updatedViewers) => {
-  //     viewers.value = updatedViewers
-  //   })
-  // }
   const initializeSocket = () => {
     try {
-      // 기존 소켓이 있다면 정리
       if (socket.value) {
         socket.value.removeAllListeners()
         socket.value.disconnect()
@@ -60,13 +40,49 @@ export const useMediasoup = () => {
 
       socket.value.on('connect_error', (error) => {
         console.error('Socket connection error:', error)
-        // 연결 오류 시 재시도
         setTimeout(initializeSocket, 5000)
       })
+
+      socket.value.on('producer-resumed', async ({ producerId, peerId, kind }) => {
+        try {
+          await consume({ producerId, peerId, kind })
+        } catch (error) {
+          console.error('Error consuming resumed producer:', error)
+        }
+      })
+
+      // socket.value.on('producer-info-response', async (producers) => {
+      //   console.log('Received producer info:', producers)
+      //   // 받은 producer 정보를 기반으로 consume 실행
+      //   for (const producerInfo of producers) {
+      //     try {
+      //       await consume(producerInfo)
+      //     } catch (error) {
+      //       console.error('Error consuming producer from info response:', error)
+      //     }
+      //   }
+      // })
 
       socket.value.on('new-peer', ({ peerId }) => {
         if (!peers.value.includes(peerId)) {
           peers.value.push(peerId)
+          // 새 피어 입장 시 현재 활성화된 프로듀서 정보 전송
+          if (videoProducer.value || audioProducer.value) {
+            socket.value.emit('announce-producers', {
+              roomId: roomId.value,
+              peerId: socket.value.id,
+              producers: [
+                videoProducer.value && {
+                  id: videoProducer.value.id,
+                  kind: 'video',
+                },
+                audioProducer.value && {
+                  id: audioProducer.value.id,
+                  kind: 'audio',
+                },
+              ].filter(Boolean),
+            })
+          }
         }
       })
 
@@ -203,11 +219,8 @@ export const useMediasoup = () => {
       mainVideoElement.value.srcObject = null
     }
 
-    // 오디오 엘리먼트 정리
-    if (remoteMediaEl.value) {
-      const audioElements = remoteMediaEl.value.querySelectorAll('audio')
-      audioElements.forEach((el) => el.remove())
-    }
+    const audioElements = document.querySelectorAll('audio')
+    audioElements.forEach((el) => el.remove())
   }
 
   const cleanupProducers = () => {
@@ -222,16 +235,6 @@ export const useMediasoup = () => {
       }
     })
   }
-
-  // const cleanup = () => {
-  //   cleanupConsumers()
-  //   cleanupProducers()
-  //   closeTransports()
-  //   device.value = null
-  //   joined.value = false
-  //   peers.value = []
-  //   viewers.value = []
-  // }
 
   const cleanup = () => {
     try {
@@ -261,29 +264,14 @@ export const useMediasoup = () => {
 
       // Producers 정리
       cleanupProducers()
-
-      // Transports 정리
       closeTransports()
 
-      // Device 정리
-      if (device.value) {
-        device.value = null
-      }
-
-      // Socket 이벤트 리스너 정리
       if (socket.value) {
-        socket.value.removeAllListeners('consume-response')
-        socket.value.removeAllListeners('new-producer')
-        socket.value.removeAllListeners('producer-closed')
-        socket.value.removeAllListeners('connect-transport')
-        socket.value.removeAllListeners('new-peer')
-        socket.value.removeAllListeners('peer-left')
-        socket.value.removeAllListeners('viewers-updated')
+        socket.value.removeAllListeners()
         socket.value.disconnect()
         socket.value = null
       }
 
-      // 상태 초기화
       joined.value = false
       peers.value = []
       viewers.value = []
@@ -311,17 +299,19 @@ export const useMediasoup = () => {
       const rawDevice = toRaw(device.value)
       const rawTransport = toRaw(recvTransport.value)
 
-      // 이미 존재하는 consumer 확인
-      const existingConsumerId = Array.from(currentConsumers.value.entries()).find(
-        ([_, { consumerData }]) => consumerData.producerId === producerId,
-      )?.[0]
+      console.log('Attempting to consume producer:', { producerId, peerId, kind })
 
-      if (existingConsumerId) {
-        console.log('Consumer already exists for producer:', producerId)
+      // 이미 해당 producer를 consume하고 있는지 체크
+      const existingConsumer = Array.from(currentConsumers.value.entries()).find(
+        ([_, { consumerData }]) =>
+          consumerData.producerId === producerId && consumerData.kind === kind,
+      )
+
+      if (existingConsumer) {
+        console.log('Producer already being consumed:', producerId)
         return
       }
 
-      // 서버에 consume 요청
       socket.value.emit('consume', {
         transportId: rawTransport.id,
         producerId,
@@ -332,7 +322,15 @@ export const useMediasoup = () => {
       })
 
       const response = await new Promise((resolve) => {
-        socket.value.once('consume-response', resolve)
+        const timeout = setTimeout(() => {
+          socket.value.off('consume-response')
+          resolve({ error: 'Consume request timeout' })
+        }, 10000)
+
+        socket.value.once('consume-response', (response) => {
+          clearTimeout(timeout)
+          resolve(response)
+        })
       })
 
       if (response.error) {
@@ -340,6 +338,7 @@ export const useMediasoup = () => {
       }
 
       const { consumerData } = response
+      console.log('Received consumer data:', consumerData)
 
       const consumer = await rawTransport.consume({
         ...consumerData,
@@ -401,36 +400,44 @@ export const useMediasoup = () => {
       consumerData,
       track: consumer.track,
     })
+    remoteMediaEl.value = el
 
-    if (consumer.kind === 'video') {
-      const newStream = new MediaStream([consumer.track])
-      mainVideoElement.value.srcObject = newStream
+    // 기존 비디오 엘리먼트 제거
+    const existingVideo = document.getElementById('main-stream') // id 변경
+    if (existingVideo) {
+      existingVideo.srcObject = null
+      existingVideo.remove()
     }
 
-    if (consumer.kind === 'audio') {
-      const audioElement = document.createElement('audio')
-      audioElement.id = consumerId
-      audioElement.autoplay = true
-      audioElement.srcObject = new MediaStream([consumer.track])
-      remoteMediaEl.value.appendChild(audioElement)
-    }
+    // 새로운 비디오 엘리먼트 생성 및 설정
+    const video = document.createElement('video')
+    video.id = 'main-stream' // id 변경
+    video.autoplay = true
+    video.playsInline = true
+    video.className = 'remote-video'
+    mainVideoElement.value = video
 
-    consumer.on('ended', () => {
-      currentConsumers.value.delete(consumerId)
+    // mediaContainer에 비디오 엘리먼트 추가
+    if (el.mediaContainer) {
+      el.mediaContainer.appendChild(video)
+      console.log('Video element created with id:', video.id)
 
-      if (consumer.kind === 'video') {
-        const remainingVideoConsumers = Array.from(currentConsumers.value.values()).filter(
-          (c) => c.consumer.kind === 'video',
-        )
+      // 기존 consumer가 있다면 스트림 다시 연결
+      const videoConsumer = Array.from(currentConsumers.value.entries()).find(
+        ([_, { consumer }]) => consumer.kind === 'video',
+      )
 
-        if (remainingVideoConsumers.length > 0) {
-          const newStream = new MediaStream([remainingVideoConsumers[0].track])
-          mainVideoElement.value.srcObject = newStream
-        } else {
-          mainVideoElement.value.srcObject = null
-        }
+      if (videoConsumer) {
+        const [_, { consumer }] = videoConsumer
+        const stream = new MediaStream([consumer.track])
+        video.srcObject = stream
+        video.play().catch((error) => {
+          console.warn('Auto-play failed:', error)
+          video.muted = true
+          video.play()
+        })
       }
-    })
+    }
   }
 
   const createMediaStream = async (options = { video: true, audio: true }) => {
@@ -454,6 +461,7 @@ export const useMediasoup = () => {
   const createProducers = async (transport, stream) => {
     const rawTransport = toRaw(transport)
     const tracks = stream.getTracks()
+    const producers = []
 
     for (const track of tracks) {
       const params = {
@@ -468,13 +476,23 @@ export const useMediasoup = () => {
       }
 
       const producer = await rawTransport.produce(params)
+      producers.push(producer)
 
       if (track.kind === 'video') {
         videoProducer.value = producer
       } else if (track.kind === 'audio') {
         audioProducer.value = producer
       }
+
+      socket.value.emit('producer-created', {
+        producerId: producer.id,
+        kind: track.kind,
+        roomId: roomId.value,
+        peerId: socket.value.id,
+      })
     }
+
+    return producers
   }
 
   const handleReconnection = async () => {
@@ -524,6 +542,7 @@ export const useMediasoup = () => {
     localStream,
     userRole,
     sendTransport,
+    remoteMediaRef, // remoteMediaRef 추가
     initializeSocket,
     createDevice,
     createTransport,
