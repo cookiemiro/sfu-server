@@ -5,6 +5,7 @@ on:
   pull_request:
     types: 
       - closed
+
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
@@ -35,30 +36,45 @@ jobs:
         NODE_ENV: production
         ROLLUP_NATIVE_BUILD: false
 
-    - name: Setup SSH
-      uses: webfactory/ssh-agent@v0.7.0
-      with:
-        ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
-
-    - name: Configure SSH
+    # SSH 키 설정을 더 엄격하게 수정
+    - name: Install SSH key
       run: |
         mkdir -p ~/.ssh
-        echo "Host *
+        echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/deploy_key
+        chmod 600 ~/.ssh/deploy_key
+        eval $(ssh-agent -s)
+        ssh-add ~/.ssh/deploy_key
+
+    # SSH 설정 파일 생성
+    - name: Configure SSH
+      run: |
+        echo "Host ${{ secrets.SERVER_HOST }}
+          HostName ${{ secrets.SERVER_HOST }}
+          User ${{ secrets.SERVER_USER }}
+          IdentityFile ~/.ssh/deploy_key
           StrictHostKeyChecking no
-          UserKnownHostsFile=/dev/null
-          LogLevel ERROR" > ~/.ssh/config
-        chmod 700 ~/.ssh
+          UserKnownHostsFile=/dev/null" > ~/.ssh/config
         chmod 600 ~/.ssh/config
 
+    # SSH 연결 테스트 (디버그 모드)
+    - name: Test SSH Connection
+      run: |
+        ssh -v -i ~/.ssh/deploy_key ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} 'echo "Connection test"'
+
+    # rsync 명령어 수정
     - name: Deploy to server
       run: |
         rsync -avz --delete \
-          -e "ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null" \
-          ./dist/ ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}:/root/sfu-server
+          -e "ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null" \
+          ./dist/ \
+          ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}:/root/sfu-server
 
-    - name: Restart and clear Nginx cache
+    # Nginx 캐시 제거 및 재시작
+    - name: Clear Nginx cache and restart
       run: |
-        ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+        ssh -i ~/.ssh/deploy_key \
+          -o StrictHostKeyChecking=no \
+          -o UserKnownHostsFile=/dev/null \
           ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} '
           sudo rm -rf /var/cache/nginx/* &&
           sudo systemctl restart nginx
