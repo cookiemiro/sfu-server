@@ -1,9 +1,11 @@
-import { ref, watch } from 'vue'
+// useMediasoup.js
+
+import { ref } from 'vue'
 import { toRaw } from 'vue'
 import * as mediasoupClient from 'mediasoup-client'
 import { io } from 'socket.io-client'
 
-const SERVER_URL = import.meta.env.VITE_SERVER_URI
+const SERVER_URL = import.meta.env.VITE_SERVER_URL
 
 export const useMediasoup = () => {
   const socket = ref(null)
@@ -17,12 +19,12 @@ export const useMediasoup = () => {
   const localStream = ref(null)
   const videoProducer = ref(null)
   const audioProducer = ref(null)
-  // const screenProducer = ref(null)
+  const screenProducer = ref(null)
   const userRole = ref('viewer')
   const remoteMediaEl = ref(null)
   const mainVideoElement = ref(null)
   const currentConsumers = ref(new Map())
-  const consumers = ref(new Map())
+  const remoteMediaRef = ref(null) // remoteMediaRef 선언 추가
 
   const initializeSocket = () => {
     try {
@@ -92,31 +94,6 @@ export const useMediasoup = () => {
 
       socket.value.on('viewers-updated', (updatedViewers) => {
         viewers.value = updatedViewers
-      })
-
-      socket.value.on('producer-closed', async ({ producerId, peerId }) => {
-        console.log(`Producer ${producerId} from peer ${peerId} was closed`)
-
-        // 해당 producer에 연결된 consumer 찾기
-        const consumer = consumers.value.get(producerId)
-        if (consumer) {
-          // consumer 정리
-          consumer.close()
-          consumers.value.delete(producerId)
-
-          // consumer와 연결된 video/audio 엘리먼트 찾기 및 정리
-          const mediaElement = document.getElementById(`consumer-${producerId}`)
-          if (mediaElement) {
-            const stream = mediaElement.srcObject
-            if (stream) {
-              stream.getTracks().forEach((track) => track.stop())
-            }
-            mediaElement.srcObject = null
-            mediaElement.remove()
-          }
-
-          console.log(`Cleaned up consumer for producer ${producerId}`)
-        }
       })
 
       return socket.value
@@ -224,7 +201,7 @@ export const useMediasoup = () => {
   }
 
   const cleanupProducers = () => {
-    ;[videoProducer, audioProducer].forEach((producer) => {
+    ;[videoProducer, audioProducer, screenProducer].forEach((producer) => {
       if (producer.value) {
         try {
           producer.value.close()
@@ -238,31 +215,7 @@ export const useMediasoup = () => {
 
   const cleanup = () => {
     try {
-      consumers.value.forEach((consumer) => {
-        consumer.close()
-      })
-      consumers.value.clear()
-
-      // Consumers 정리
-      currentConsumers.value.forEach(({ consumer }) => {
-        try {
-          consumer.close()
-        } catch (error) {
-          console.warn('Error closing consumer:', error)
-        }
-      })
-      currentConsumers.value.clear()
-
-      // Audio elements 정리
-      const audioElements = document.querySelectorAll('audio')
-      audioElements.forEach((el) => el.remove())
-
-      // Video element 정리
-      if (window.remoteVideo) {
-        window.remoteVideo.srcObject = null
-      }
-
-      // Producers 정리
+      cleanupConsumers()
       cleanupProducers()
       closeTransports()
 
@@ -280,7 +233,6 @@ export const useMediasoup = () => {
       remoteMediaEl.value = null
       device.value = null
 
-      // window 객체의 remoteVideo 제거
       // delete window.remoteVideo
     } catch (error) {
       console.error('Error during cleanup:', error)
@@ -345,11 +297,165 @@ export const useMediasoup = () => {
         appData: { peerId, producerId },
       })
 
-      consumers.value.set(producerId, consumer)
-
       await consumer.resume()
+      console.log('Consumer created and resumed:', consumer.id)
 
-      renderRemoteMedia(consumer, consumerData)
+      // 비디오 스트림 처리
+      // if (consumer.kind === 'video') {
+      //   try {
+      //     console.log('Setting up video stream')
+      //     const stream = new MediaStream([consumer.track])
+
+      //     // 기존 비디오 엘리먼트 제거
+      //     const existingVideo = document.getElementById('remote-video-main')
+      //     if (existingVideo) {
+      //       existingVideo.srcObject = null
+      //       existingVideo.remove()
+      //     }
+
+      //     // 새로운 비디오 엘리먼트 생성 및 설정
+      //     const videoElement = document.createElement('video')
+      //     videoElement.id = 'main-stream'
+      //     videoElement.className = 'remote-video'
+      //     videoElement.autoplay = true
+      //     videoElement.playsInline = true
+      //     videoElement.style.width = '100%'
+      //     videoElement.style.height = '100%'
+      //     videoElement.style.objectFit = 'contain'
+      //     videoElement.srcObject = stream
+
+      //     const playPromise = videoElement.play()
+      //     if (playPromise !== undefined) {
+      //       playPromise
+      //         .then(() => {
+      //           console.log('Video playback started successfully')
+      //         })
+      //         .catch((error) => {
+      //           console.warn('Auto-play failed:', error)
+      //           videoElement.muted = true
+      //           videoElement.play().catch((e) => console.error('Muted playback failed:', e))
+      //         })
+      //     }
+
+      //     // consumer가 종료될 때 비디오 엘리먼트 정리
+      //     consumer.on('ended', () => {
+      //       console.log('Video consumer ended, removing element')
+      //       if (videoElement.parentNode) {
+      //         videoElement.srcObject = null
+      //         videoElement.remove()
+      //       }
+      //     })
+      //   } catch (error) {
+      //     console.error('Error setting up video stream:', error)
+      //   }
+      // }
+      if (consumer.kind === 'video') {
+        try {
+          console.log('Setting up video stream')
+          const stream = new MediaStream([consumer.track])
+
+          const videoElement = document.getElementById('main-stream') // id 변경
+          console.log(videoElement)
+          if (videoElement) {
+            console.log('Found video element, setting stream')
+            videoElement.srcObject = stream
+
+            const playPromise = videoElement.play()
+            if (playPromise !== undefined) {
+              playPromise
+                .then(() => {
+                  console.log('Video playback started successfully')
+                })
+                .catch((error) => {
+                  console.warn('Auto-play failed:', error)
+                  videoElement.muted = true
+                  videoElement.play().catch((e) => console.error('Muted playback failed:', e))
+                })
+            }
+          } else {
+            console.log('Video element not found, creating new element')
+            // remoteMediaEl이 설정되어 있으면 새로 비디오 엘리먼트 생성
+            if (remoteMediaEl.value?.mediaContainer) {
+              const video = document.createElement('video')
+              video.id = 'main-stream' // id 변경
+              video.autoplay = true
+              video.playsInline = true
+              video.className = 'remote-video'
+              video.srcObject = stream
+              remoteMediaEl.value.mediaContainer.appendChild(video)
+              mainVideoElement.value = video
+
+              const playPromise = video.play()
+              if (playPromise !== undefined) {
+                playPromise.catch((error) => {
+                  console.warn('Auto-play failed:', error)
+                  video.muted = true
+                  video.play()
+                })
+              }
+            } else {
+              console.warn('Remote media container not available')
+            }
+          }
+
+          // consumer가 종료될 때 스트림 정리
+          consumer.on('ended', () => {
+            const videoEl = document.getElementById('main-stream') // id 변경
+            if (videoEl) {
+              videoEl.srcObject = null
+            }
+          })
+        } catch (error) {
+          console.error('Error setting up video stream:', error)
+        }
+      }
+
+      // 오디오 스트림 처리
+      if (consumer.kind === 'audio') {
+        try {
+          console.log('Setting up audio stream')
+          const audioElementId = `audio-${producerId}`
+          const existingAudio = document.getElementById(audioElementId)
+          if (existingAudio) {
+            console.log('Removing existing audio element:', audioElementId)
+            existingAudio.remove()
+          }
+
+          const audioElement = document.createElement('audio')
+          audioElement.id = audioElementId
+          audioElement.autoplay = true
+          audioElement.srcObject = new MediaStream([consumer.track])
+          document.body.appendChild(audioElement)
+
+          console.log('Created new audio element:', audioElementId)
+
+          consumer.on('ended', () => {
+            console.log('Audio consumer ended, removing element:', audioElementId)
+            if (audioElement.parentNode) {
+              audioElement.srcObject = null
+              audioElement.remove()
+            }
+          })
+        } catch (error) {
+          console.error('Error setting up audio stream:', error)
+        }
+      }
+
+      // consumer 정보 저장
+      currentConsumers.value.set(consumer.id, {
+        consumer,
+        consumerData: {
+          ...consumerData,
+          kind: consumer.kind,
+        },
+      })
+
+      consumer.on('ended', () => {
+        console.log('Consumer ended:', consumer.id)
+        currentConsumers.value.delete(consumer.id)
+      })
+
+      return consumer
     } catch (error) {
       console.error(`Error consuming ${kind}:`, error)
       throw new Error(`미디어 수신에 실패했습니다: ${kind}`)
@@ -362,43 +468,8 @@ export const useMediasoup = () => {
       return
     }
 
-    remoteMediaEl.value = el
-
-    if (!mainVideoElement.value) {
-      const video = document.createElement('video')
-      video.id = 'main-stream'
-      video.autoplay = true
-      video.playsInline = true
-      video.className = 'w-full h-full object-cover remote-video'
-      mainVideoElement.value = video
-      remoteMediaEl.value.appendChild(video)
-    }
-  }
-
-  const renderRemoteMedia = async (consumer, consumerData) => {
-    if (!remoteMediaEl.value) {
-      console.log(remoteMediaEl.value)
-
-      console.warn('Remote media element not ready, retrying in 100ms...')
-      setTimeout(() => {
-        if (remoteMediaEl.value) {
-          renderRemoteMedia(consumer, consumerData)
-        }
-      }, 100)
-      return
-    }
-
-    if (!mainVideoElement.value) {
-      console.warn('Main video element not ready, creating...')
-      setRemoteMediaEl(remoteMediaEl.value)
-    }
-
-    const consumerId = `${consumer.kind}-${consumerData.producerId}`
-
-    currentConsumers.value.set(consumerId, {
-      consumer,
-      consumerData,
-      track: consumer.track,
+    console.log('Setting remote media element:', {
+      mediaContainer: el.mediaContainer,
     })
     remoteMediaEl.value = el
 
@@ -495,43 +566,6 @@ export const useMediasoup = () => {
     return producers
   }
 
-  const handleReconnection = async () => {
-    try {
-      // 서버에 현재 방의 producer 목록을 요청
-      socket.value.emit('get-producers', {
-        roomId: roomId.value,
-        peerId: socket.value.id,
-      })
-
-      // 서버로부터 producer 목록을 받아서 처리
-      socket.value.on('producers-list', async ({ producers }) => {
-        console.log('Received producers list:', producers)
-
-        for (const producer of producers) {
-          const { producerId, peerId, kind } = producer
-
-          // 이미 consume 중인 producer인지 확인
-          const isAlreadyConsuming = Array.from(currentConsumers.value.entries()).some(
-            ([_, { consumerData }]) => consumerData.producerId === producerId,
-          )
-
-          if (!isAlreadyConsuming) {
-            try {
-              const consumer = await consume({ producerId, peerId, kind })
-              if (consumer) {
-                await renderRemoteMedia(consumer, { producerId, peerId })
-              }
-            } catch (error) {
-              console.error(`Failed to consume ${kind} from peer ${peerId}:`, error)
-            }
-          }
-        }
-      })
-    } catch (error) {
-      console.error('Error during reconnection:', error)
-    }
-  }
-
   return {
     socket,
     device,
@@ -554,7 +588,6 @@ export const useMediasoup = () => {
     consume,
     setRemoteMediaEl,
     currentConsumers,
-    handleReconnection,
     cleanup,
   }
 }
