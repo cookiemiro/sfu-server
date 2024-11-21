@@ -2,9 +2,10 @@ name: Vue.js CI/CD with Nginx
 
 on:
   push:
-    branches: [ "main" ]  # main 브랜치에 push가 발생했을 때 실행
+    branches: [ "main" ]  # main 브랜치 push 이벤트
   pull_request:
-    branches: [ "main" ]  # main 브랜치로의 PR이 생성됐을 때 실행
+    types: 
+      - closed  # PR이 close될 때
 
 jobs:
   build-and-deploy:
@@ -22,17 +23,21 @@ jobs:
         cache-dependency-path: '**/package-lock.json'
 
     - name: Install dependencies
+      run: | 
+        npm install
+        npm install @rollup/rollup-linux-x64-gnu
+
+    - name: Create env file
       run: |
-          if [ -f package-lock.json ]; then
-            npm ci
-          else
-            npm install
-          fi
+        echo "VITE_SERVER_URI=${{ secrets.API_URL }}" >> .env
+        echo "VITE_WEBSOCKET_URI=${{ secrets.APP_TITLE }}" >> .env
 
     - name: Build Vue project
       run: npm run build   # Vue 프로젝트 빌드
-      env:
+      env: 
         NODE_ENV: production
+        # Rollup 관련 환경 변수 설정
+        ROLLUP_NATIVE_BUILD: false
 
     - name: Setup SSH
       uses: webfactory/ssh-agent@v0.7.0
