@@ -30,7 +30,7 @@ jobs:
     - name: Create env file
       run: |
         echo "VITE_SERVER_URI=${{ secrets.API_URL }}" >> .env
-        echo "VITE_WEBSOCKET_URI=${{ secrets.APP_TITLE }}" >> .env
+        echo "VITE_WEBSOCKET_URI=${{ secrets.WEBSOCKET_URI }}" >> .env
 
     - name: Build Vue project
       run: npm run build   # Vue 프로젝트 빌드
@@ -47,15 +47,15 @@ jobs:
     - name: Add known hosts
       run: |
         mkdir -p ~/.ssh
-        ssh-keyscan -H ${{ secrets.HOST }} >> ~/.ssh/known_hosts
+        ssh-keyscan -H ${{ secrets.SERVER_HOST }} >> ~/.ssh/known_hosts
 
     - name: Deploy to server
       run: |
-        rsync -avz --delete ./dist/ ${{ secrets.USERNAME }}@${{ secrets.HOST }}:/root/sfu-server
+        rsync -avz --delete ./dist/ ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}:/root/sfu-server
         
     #- name: Restart Nginx
     #  run: |
-    #    ssh ${{ secrets.USERNAME }}@${{ secrets.HOST }} 'sudo systemctl restart nginx'
+    #    ssh ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} 'sudo systemctl restart nginx'
 
     # Nginx 캐시 삭제
     - name: Clear Nginx cache
