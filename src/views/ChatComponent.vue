@@ -1,92 +1,3 @@
-<template>
-  <div class="chat-container">
-    <div class="connection-status" :class="connectionStatus">
-      <span>{{
-        connectionStatus === 'connected'
-          ? '연결됨'
-          : connectionStatus === 'connecting'
-            ? '연결 중...'
-            : connectionStatus === 'error'
-              ? '연결 실패'
-              : '연결 끊김'
-      }}</span>
-      <button
-        v-if="connectionStatus === 'disconnected' || connectionStatus === 'error'"
-        @click="connect"
-        :disabled="isConnecting"
-        class="reconnect-button"
-      >
-        {{ isConnecting ? '연결 시도 중...' : '재연결' }}
-      </button>
-    </div>
-
-    <div class="messages-wrapper">
-      <div class="messages-container" ref="messageContainer">
-        <div
-          v-for="message in messages"
-          :key="message.timestamp"
-          class="message"
-          :class="{
-            'own-message': message.userName === props.userName,
-          }"
-        >
-          <div class="message-header">
-            <span class="username">{{ message.userName }}</span>
-            <span class="timestamp">{{ new Date(message.timestamp).toLocaleTimeString() }}</span>
-          </div>
-          <div class="message-content">
-            {{ message.content }}
-            <button
-              v-if="message.userName !== props.userName"
-              @click="openReportDialog(message)"
-              class="report-button"
-            >
-              신고
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <div class="input-wrapper">
-      <div class="input-container">
-        <input
-          v-model="messageInput"
-          type="text"
-          @keyup.enter="sendMessage"
-          placeholder="메시지를 입력하세요"
-          class="message-input"
-          :disabled="connectionStatus !== 'connected'"
-        />
-        <button
-          @click="sendMessage"
-          class="send-button"
-          :disabled="connectionStatus !== 'connected'"
-        >
-          전송
-        </button>
-      </div>
-    </div>
-
-    <!-- 신고 다이얼로그 -->
-    <div v-if="showReportDialog" class="report-dialog">
-      <div class="report-dialog-content">
-        <h3>채팅 신고</h3>
-        <p>신고할 메시지: {{ selectedMessage?.content }}</p>
-        <textarea
-          v-model="reportReason"
-          placeholder="신고 사유를 입력하세요"
-          class="report-reason"
-        ></textarea>
-        <div class="dialog-buttons">
-          <button @click="submitReport" class="submit-report-button">신고하기</button>
-          <button @click="showReportDialog = false" class="cancel-button">취소</button>
-        </div>
-      </div>
-    </div>
-  </div>
-</template>
-
 <script setup>
 import { ref, onMounted, onUnmounted, nextTick } from 'vue'
 import { Client } from '@stomp/stompjs'
@@ -104,14 +15,13 @@ const props = defineProps({
 
 const messages = ref([])
 const messageInput = ref('')
-const messageContainer = ref(null)
 const stompClient = ref(null)
+const messageContainer = ref(null)
 const connectionStatus = ref('disconnected')
 const isConnecting = ref(false)
-
-// 신고 관련 상태
-const showReportDialog = ref(false)
-const selectedMessage = ref(null)
+const blockedUsers = ref(new Set())
+const showReportModal = ref(false)
+const reportedMessage = ref(null)
 const reportReason = ref('')
 
 const connect = () => {
@@ -137,8 +47,11 @@ const connect = () => {
       try {
         const receivedMessage = JSON.parse(message.body)
         console.log('Received message:', receivedMessage)
-        messages.value.push(receivedMessage)
-        scrollToBottom()
+        // 차단된 사용자의 메시지는 표시하지 않음
+        if (!blockedUsers.value.has(receivedMessage.userName)) {
+          messages.value.push(receivedMessage)
+          scrollToBottom()
+        }
       } catch (error) {
         console.error('Error parsing message:', error)
       }
@@ -201,57 +114,92 @@ const scrollToBottom = () => {
   }
 }
 
-// 신고 관련 함수
-const openReportDialog = (message) => {
-  selectedMessage.value = message
-  showReportDialog.value = true
+const loadChatHistory = async () => {
+  const response = await fetch(`http://127.0.0.1:8080/api/chat/history/${props.roomId}`)
+  console.log(response)
+
+  if (response.ok) {
+    const history = await response.json()
+    // 차단된 사용자의 메시지를 필터링
+    messages.value = history.filter((msg) => !blockedUsers.value.has(msg.userName))
+    nextTick(() => {
+      scrollToBottom()
+    })
+  }
+  // try {
+  // } catch (error) {
+  //   console.error('채팅 히스토리 로드 실패:', error)
+  // }
 }
 
+// 사용자 차단 기능
+const blockUser = (userName) => {
+  if (userName === props.userName) return // 자기 자신은 차단할 수 없음
+  blockedUsers.value.add(userName)
+  // 차단된 사용자의 메시지를 현재 메시지 목록에서 제거
+  messages.value = messages.value.filter((msg) => !blockedUsers.value.has(msg.userName))
+  // localStorage에 차단 목록 저장
+  localStorage.setItem(`blockedUsers_${props.roomId}`, JSON.stringify([...blockedUsers.value]))
+}
+
+// 차단 해제 기능
+const unblockUser = (userName) => {
+  blockedUsers.value.delete(userName)
+  // localStorage 업데이트
+  localStorage.setItem(`blockedUsers_${props.roomId}`, JSON.stringify([...blockedUsers.value]))
+  // 채팅 히스토리 다시 로드
+  loadChatHistory()
+}
+
+// 신고 모달 표시
+const openReportModal = (message) => {
+  reportedMessage.value = message
+  showReportModal.value = true
+}
+
+// 메시지 신고 처리
 const submitReport = async () => {
+  if (!reportedMessage.value || !reportReason.value) return
+
   try {
-    const response = await fetch('/api/chat-reports', {
+    const response = await fetch('http://localhost:8080/api/chat/report', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        userId: getCurrentUserId(), // 현재 사용자 ID를 가져오는 함수 필요
-        projectId: props.roomId,
-        managerId: getProjectManagerId(), // 프로젝트 매니저 ID를 가져오는 함수 필요
+        userId: 1,
+        projectId: 1,
         reason: reportReason.value,
-        chatMessage: selectedMessage.value.content,
+        chatMessage: reportedMessage.value.connect,
       }),
     })
 
     if (response.ok) {
       alert('신고가 접수되었습니다.')
-      showReportDialog.value = false
-      reportReason.value = ''
-      selectedMessage.value = null
+    } else {
+      throw new Error('신고 처리 실패')
     }
   } catch (error) {
-    console.error('신고 처리 실패:', error)
+    console.error('메시지 신고 실패:', error)
     alert('신고 처리 중 오류가 발생했습니다.')
+  } finally {
+    showReportModal.value = false
+    reportedMessage.value = null
+    reportReason.value = ''
   }
 }
 
-// 채팅 히스토리 로드
-const loadChatHistory = async () => {
-  try {
-    const response = await fetch(`/api/chat/history/${props.roomId}`)
-    if (response.ok) {
-      const history = await response.json()
-      messages.value = history
-      nextTick(() => {
-        scrollToBottom()
-      })
-    }
-  } catch (error) {
-    console.error('채팅 히스토리 로드 실패:', error)
+// 차단된 사용자 목록 로드
+const loadBlockedUsers = () => {
+  const savedBlockedUsers = localStorage.getItem(`blockedUsers_${props.roomId}`)
+  if (savedBlockedUsers) {
+    blockedUsers.value = new Set(JSON.parse(savedBlockedUsers))
   }
 }
 
 onMounted(() => {
+  // loadBlockedUsers()
   loadChatHistory()
   connect()
 })
@@ -260,6 +208,112 @@ onUnmounted(() => {
   disconnect()
 })
 </script>
+
+<template>
+  <div class="chat-container">
+    <div class="connection-status" :class="connectionStatus">
+      <span>{{
+        connectionStatus === 'connected'
+          ? '연결됨'
+          : connectionStatus === 'connecting'
+            ? '연결 중...'
+            : connectionStatus === 'error'
+              ? '연결 실패'
+              : '연결 끊김'
+      }}</span>
+      <button
+        v-if="connectionStatus === 'disconnected' || connectionStatus === 'error'"
+        @click="connect"
+        :disabled="isConnecting"
+        class="reconnect-button"
+      >
+        {{ isConnecting ? '연결 시도 중...' : '재연결' }}
+      </button>
+    </div>
+
+    <div class="messages-wrapper">
+      <div class="messages-container" ref="messageContainer">
+        <div
+          v-for="message in messages"
+          :key="message.timestamp"
+          class="message-group"
+          :class="{
+            'own-message-group': message.userName === props.userName,
+          }"
+        >
+          <span class="timestamp">
+            {{ new Date(message.timestamp).toLocaleTimeString() }}
+          </span>
+          <div
+            class="message"
+            :class="{
+              'own-message': message.userName === props.userName,
+            }"
+          >
+            <div class="message-header">
+              <span class="username">{{ message.userName }}</span>
+            </div>
+            <div class="message-content">
+              {{ message.content }}
+            </div>
+            <!-- 자신의 메시지가 아닌 경우에만 메뉴 버튼 표시 -->
+            <div v-if="message.userName !== props.userName" class="message-actions">
+              <button class="action-button" @click="openReportModal(message)">신고</button>
+              <button class="action-button" @click="blockUser(message.userName)">차단</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="input-wrapper">
+      <div class="input-container">
+        <input
+          v-model="messageInput"
+          type="text"
+          @keyup.enter="sendMessage"
+          placeholder="메시지를 입력하세요"
+          class="message-input"
+          :disabled="connectionStatus !== 'connected'"
+        />
+        <button
+          @click="sendMessage"
+          class="send-button"
+          :disabled="connectionStatus !== 'connected'"
+        >
+          전송
+        </button>
+      </div>
+    </div>
+
+    <!-- 신고 모달 -->
+    <div v-if="showReportModal" class="modal">
+      <div class="modal-content">
+        <h3>메시지 신고</h3>
+        <p>사용자: {{ reportedMessage?.userName }}</p>
+        <p>메시지: {{ reportedMessage?.content }}</p>
+        <textarea
+          v-model="reportReason"
+          placeholder="신고 사유를 입력하세요"
+          class="report-reason"
+        ></textarea>
+        <div class="modal-actions">
+          <button @click="submitReport" class="submit-button">신고하기</button>
+          <button @click="showReportModal = false" class="cancel-button">취소</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 차단 목록 관리 섹션 -->
+    <div v-if="blockedUsers.size > 0" class="blocked-users">
+      <h4>차단된 사용자</h4>
+      <div v-for="user in [...blockedUsers]" :key="user" class="blocked-user">
+        <span>{{ user }}</span>
+        <button @click="unblockUser(user)" class="unblock-button">차단 해제</button>
+      </div>
+    </div>
+  </div>
+</template>
 
 <style scoped>
 .chat-container {
@@ -273,30 +327,137 @@ onUnmounted(() => {
 }
 
 .connection-status {
-  padding: 0.25rem;
+  padding: 0.5rem;
   text-align: center;
-  font-size: 0.75rem;
+  font-size: 0.8rem;
   background-color: #f44336;
   color: white;
   transition: background-color 0.3s ease;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  gap: 0.5rem;
 }
 
 .connection-status.connected {
   background-color: #4caf50;
 }
 
-.connection-status.error {
+/* 메시지 액션 버튼 스타일 */
+.message-actions {
+  display: none;
+  position: absolute;
+  right: 8px;
+  top: 8px;
+  gap: 0.5rem;
+}
+
+.message:hover .message-actions {
+  display: flex;
+}
+
+.action-button {
+  padding: 0.25rem 0.5rem;
+  font-size: 0.75rem;
+  border: none;
+  border-radius: 4px;
+  background-color: rgba(0, 0, 0, 0.1);
+  color: #495057;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.action-button:hover {
+  background-color: rgba(0, 0, 0, 0.2);
+}
+
+/* 모달 스타일 */
+.modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1000;
+}
+
+.modal-content {
+  background-color: white;
+  padding: 2rem;
+  border-radius: 8px;
+  width: 90%;
+  max-width: 500px;
+}
+
+.report-reason {
+  width: 100%;
+  height: 300px;
+  margin: 1rem 0;
+  padding: 0.5rem;
+  border: 1px solid #dee2e6;
+  border-radius: 4px;
+  resize: none;
+}
+
+.modal-actions {
+  display: flex;
+  gap: 1rem;
+  justify-content: flex-end;
+}
+
+.submit-button,
+.cancel-button {
+  padding: 0.5rem 1rem;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.submit-button {
+  background-color: #007bff;
+  color: white;
+}
+
+.cancel-button {
+  background-color: #6c757d;
+  color: white;
+}
+
+/* 차단된 사용자 목록 스타일 */
+.blocked-users {
+  padding: 1rem;
+  background-color: white;
+  border-top: 1px solid #dee2e6;
+}
+
+.blocked-user {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.5rem;
+  background-color: #f8f9fa;
+  margin: 0.5rem 0;
+  border-radius: 4px;
+}
+
+.unblock-button {
+  padding: 0.25rem 0.5rem;
+  font-size: 0.75rem;
+  border: none;
+  border-radius: 4px;
   background-color: #dc3545;
+  color: white;
+  cursor: pointer;
+}
+
+.unblock-button:hover {
+  background-color: #c82333;
 }
 
 .messages-wrapper {
   flex: 1;
   min-height: 0;
-  padding: 0.5rem;
+  padding: 1rem;
 }
 
 .messages-container {
@@ -304,22 +465,41 @@ onUnmounted(() => {
   overflow-y: auto;
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
+  gap: 1rem;
+  padding: 1rem;
 }
 
+/* 메시지 그룹 (시간 + 메시지 박스) */
+.message-group {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.25rem;
+}
+
+/* 시간 스타일 */
+.timestamp {
+  font-size: 0.75rem;
+  color: #adb5bd;
+  margin: 0 0.5rem;
+}
+
+/* 메시지 박스 스타일 */
 .message {
-  padding: 0.5rem;
+  padding: 0.8rem;
   background-color: white;
-  border-radius: 8px;
-  width: fit-content;
-  max-width: 75%;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+  border-radius: 12px;
+  width: 60%;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
   position: relative;
-  animation: fadeIn 0.3s ease;
+}
+
+/* 자신의 메시지 정렬 */
+.own-message-group {
+  align-items: flex-end;
 }
 
 .own-message {
-  margin-left: auto;
   background-color: #007bff;
   color: white;
 }
@@ -327,21 +507,30 @@ onUnmounted(() => {
 .message-header {
   display: flex;
   justify-content: space-between;
-  gap: 0.5rem;
+  gap: 50px;
   align-items: center;
-  margin-bottom: 0.25rem;
-  font-size: 0.75rem;
+  margin-bottom: 0.5rem;
+  font-size: 0.85rem;
+}
+
+.own-message .message-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 50px;
+  align-items: center;
+  margin-bottom: 0.5rem;
+  font-size: 0.85rem;
 }
 
 .message-content {
   word-break: break-word;
-  line-height: 1.3;
-  font-size: 0.9rem;
+  line-height: 1.4;
 }
 
 .username {
   font-weight: 600;
   color: #495057;
+  order: 1; /* username이 먼저 표시 */
 }
 
 .own-message .username {
@@ -350,7 +539,8 @@ onUnmounted(() => {
 
 .timestamp {
   color: #adb5bd;
-  font-size: 0.7rem;
+  font-size: 0.75rem;
+  order: 2; /* timestamp가 나중에 표시 */
 }
 
 .own-message .timestamp {
@@ -358,22 +548,22 @@ onUnmounted(() => {
 }
 
 .input-wrapper {
-  padding: 0.5rem;
+  padding: 1rem;
   background-color: white;
   border-top: 1px solid #dee2e6;
 }
 
 .input-container {
   display: flex;
-  gap: 0.5rem;
+  gap: 0.75rem;
 }
 
 .message-input {
   flex: 1;
-  padding: 0.5rem;
+  padding: 0.75rem;
   border: 1px solid #dee2e6;
-  border-radius: 6px;
-  font-size: 0.9rem;
+  border-radius: 8px;
+  font-size: 0.95rem;
   transition: border-color 0.2s ease;
 }
 
@@ -388,13 +578,12 @@ onUnmounted(() => {
 }
 
 .send-button {
-  padding: 0.5rem 1rem;
+  padding: 0.75rem 1.5rem;
   background-color: #007bff;
   color: white;
   border: none;
-  border-radius: 6px;
+  border-radius: 8px;
   font-weight: 600;
-  font-size: 0.9rem;
   cursor: pointer;
   transition: background-color 0.2s ease;
 }
@@ -408,82 +597,35 @@ onUnmounted(() => {
   cursor: not-allowed;
 }
 
-.report-button {
-  font-size: 0.75rem;
-  padding: 0.2rem 0.5rem;
-  background-color: transparent;
-  border: none;
-  color: #dc3545;
-  cursor: pointer;
-  opacity: 0;
-  transition: opacity 0.2s ease;
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
-.message:hover .report-button {
-  opacity: 1;
-}
-
-.report-dialog {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background-color: rgba(0, 0, 0, 0.5);
+.connection-status {
   display: flex;
   justify-content: center;
   align-items: center;
-  z-index: 1000;
+  gap: 1rem;
 }
 
-.report-dialog-content {
-  background-color: white;
-  padding: 1.5rem;
-  border-radius: 8px;
-  width: 90%;
-  max-width: 500px;
-}
-
-.report-reason {
-  width: 100%;
-  min-height: 100px;
-  margin: 1rem 0;
-  padding: 0.5rem;
-  border: 1px solid #dee2e6;
-  border-radius: 4px;
-}
-
-.dialog-buttons {
-  display: flex;
-  gap: 0.5rem;
-  justify-content: flex-end;
-}
-
-.submit-report-button {
-  padding: 0.5rem 1rem;
+.connection-status.error {
   background-color: #dc3545;
-  color: white;
-  border: none;
-  border-radius: 4px;
-  cursor: pointer;
-}
-
-.cancel-button {
-  padding: 0.5rem 1rem;
-  background-color: #6c757d;
-  color: white;
-  border: none;
-  border-radius: 4px;
-  cursor: pointer;
 }
 
 .reconnect-button {
-  padding: 0.2rem 0.5rem;
+  padding: 0.25rem 0.75rem;
   border-radius: 4px;
   border: 1px solid white;
   background: transparent;
   color: white;
-  font-size: 0.75rem;
+  font-size: 0.8rem;
   cursor: pointer;
   transition: all 0.2s ease;
 }
@@ -497,20 +639,9 @@ onUnmounted(() => {
   cursor: not-allowed;
 }
 
-@keyframes fadeIn {
-  from {
-    opacity: 0;
-    transform: translateY(5px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
 /* 스크롤바 스타일링 */
 .messages-container::-webkit-scrollbar {
-  width: 4px;
+  width: 6px;
 }
 
 .messages-container::-webkit-scrollbar-track {
@@ -519,7 +650,7 @@ onUnmounted(() => {
 
 .messages-container::-webkit-scrollbar-thumb {
   background: #adb5bd;
-  border-radius: 2px;
+  border-radius: 3px;
 }
 
 .messages-container::-webkit-scrollbar-thumb:hover {
