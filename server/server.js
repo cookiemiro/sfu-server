@@ -21,29 +21,120 @@ const io = new Server(server, {
 
 const mediasoupService = new MediasoupService()
 
+// 각 방의 통계를 저장할 Map 추가
+const roomStats = new Map()
+const userRooms = new Map() // 사용자별 현재 접속한 방 추적
+
+// 시청자 수 업데이트 및 브로드캐스트 함수
+const updateViewerStats = (socket, roomId) => {
+  const room = mediasoupService.getRoom(roomId)
+  if (!room) return
+
+  const stats = roomStats.get(roomId)
+  if (!stats) return
+
+  // 호스트를 제외한 시청자 수 계산
+  const viewerCount = room.peers.size - (room.hostPeerId ? 1 : 0)
+
+  stats.currentViewers = viewerCount
+  stats.peakViewers = Math.max(stats.peakViewers, viewerCount)
+  stats.viewerHistory.push({
+    timestamp: Date.now(),
+    count: viewerCount,
+  })
+
+  // 통계 브로드캐스트
+  io.to(roomId).emit('room-stats-updated', {
+    currentViewers: stats.currentViewers,
+    peakViewers: stats.peakViewers,
+    duration: Date.now() - stats.startTime,
+  })
+
+  // 이후 주기적으로 통계 업데이트
+  const statsInterval = setInterval(() => {
+    stats.duration = Date.now() - stats.startTime
+    io.to(roomId).emit('room-stats-updated', {
+      currentViewers: stats.currentViewers,
+      peakViewers: stats.peakViewers,
+      duration: stats.duration,
+    })
+  }, 1000)
+
+  // 소켓 연결이 끊어지면 인터벌 정리
+  socket.on('disconnect', () => {
+    clearInterval(statsInterval)
+  })
+}
+
 // Mediasoup 워커 초기화
 await mediasoupService.initialize(1) // 1개의 워커 생성
 
 const cleanupPeer = (socket, peerId) => {
-  mediasoupService.rooms.forEach((room, roomId) => {
-    const peer = room.getPeer(peerId)
-    if (peer) {
-      peer.close()
-      room.removePeer(peerId)
-      socket.to(roomId).emit('peer-left', { peerId })
-      console.log(`Peer ${peerId} left room ${roomId}`)
+  // 현재 사용자가 있는 방 ID 가져오기
+  const roomId = userRooms.get(peerId)
 
-      // Update viewers list
-      const viewers = Array.from(room.peers.keys()).filter((id) => id !== room.hostPeerId)
-      io.to(roomId).emit('viewers-updated', viewers)
+  if (!roomId) {
+    console.log(`No room found for peer ${peerId}`)
+    return
+  }
 
-      // 방에 아무도 없으면 방 제거
-      if (room.peers.size === 0) {
-        mediasoupService.removeRoom(roomId)
-        console.log(`Room ${roomId} removed`)
-      }
+  const room = mediasoupService.getRoom(roomId)
+  if (!room) {
+    console.log(`Room ${roomId} not found`)
+    userRooms.delete(peerId)
+    return
+  }
+
+  // Peer 제거
+  const peer = room.getPeer(peerId)
+  if (!peer) {
+    console.log(`Peer ${peerId} not found in room ${roomId}`)
+    userRooms.delete(peerId)
+    return
+  }
+
+  try {
+    // Peer 정리
+    peer.close()
+    room.removePeer(peerId)
+
+    // 이벤트 발송
+    socket.to(roomId).emit('peer-left', { peerId })
+    console.log(`Peer ${peerId} left room ${roomId}`)
+
+    // 시청자 목록 업데이트
+    const viewers = Array.from(room.peers.keys()).filter((id) => id !== room.hostPeerId)
+    io.to(roomId).emit('viewers-updated', viewers)
+
+    // 방 통계 업데이트
+    const stats = roomStats.get(roomId)
+    if (stats) {
+      stats.currentViewers = viewers.length
+      io.to(roomId).emit('room-stats-updated', {
+        currentViewers: stats.currentViewers,
+        peakViewers: stats.peakViewers,
+        duration: Date.now() - stats.startTime,
+      })
     }
-  })
+
+    // 방에 아무도 없으면 모든 데이터 정리
+    if (room.peers.size === 0) {
+      mediasoupService.removeRoom(roomId)
+      roomStats.delete(roomId)
+      console.log(`Room ${roomId} and its stats removed`)
+    }
+
+    // 사용자 방 정보 삭제
+    userRooms.delete(peerId)
+  } catch (error) {
+    console.error('Error during peer cleanup:', error)
+    // 에러가 발생해도 기본적인 정리는 수행
+    userRooms.delete(peerId)
+    if (room.peers.size === 0) {
+      mediasoupService.removeRoom(roomId)
+      roomStats.delete(roomId)
+    }
+  }
 }
 
 io.on('connection', (socket) => {
@@ -88,16 +179,51 @@ io.on('connection', (socket) => {
   // 방 참여 요청 처리
   socket.on('join-room', async ({ roomId, peerId }) => {
     try {
+      // 이전 방에서 나가기
+      if (userRooms.has(peerId)) {
+        cleanupPeer(socket, peerId)
+      }
+
       const room = await mediasoupService.createRoom(roomId)
       const peer = new Peer(peerId)
       room.addPeer(peer)
 
-      // Send/Receive transport 생성
-      const sendTransportOptions = await mediasoupService.createWebRtcTransport(room, peer, 'send')
-      const recvTransportOptions = await mediasoupService.createWebRtcTransport(room, peer, 'recv')
+      // 사용자의 현재 방 기록
+      userRooms.set(peerId, roomId)
+
+      console.log(roomStats)
+
+      // 방 통계가 없으면 초기화
+      if (!roomStats.has(roomId)) {
+        roomStats.set(roomId, {
+          currentViewers: 0,
+          peakViewers: 0,
+          startTime: Date.now(),
+          viewerHistory: [],
+        })
+      }
 
       // 소켓을 해당 방에 조인
       socket.join(roomId)
+
+      // 방에 참여한 peer에게 알림
+      socket.emit('peer-joined', { peerId })
+
+      // 시청자 통계 업데이트
+      // 시청자 통계 업데이트
+      const viewers = Array.from(room.peers.keys()).filter((id) => id !== room.hostPeerId)
+      const stats = roomStats.get(roomId)
+      stats.currentViewers = viewers.length
+      stats.peakViewers = Math.max(stats.peakViewers, viewers.length)
+
+      io.to(roomId).emit('room-stats-updated', {
+        currentViewers: stats.currentViewers,
+        peakViewers: stats.peakViewers,
+      })
+
+      // Send/Receive transport 생성
+      const sendTransportOptions = await mediasoupService.createWebRtcTransport(room, peer, 'send')
+      const recvTransportOptions = await mediasoupService.createWebRtcTransport(room, peer, 'recv')
 
       // 기존 피어 목록과 프로듀서 정보 수집
       const peerIds = Array.from(room.peers.keys()).filter((id) => id !== peerId)
@@ -121,9 +247,24 @@ io.on('connection', (socket) => {
     }
   })
 
-  socket.on('leave-room', () => {
+  // 통계 업데이트 요청 처리
+  socket.on('request-stats-update', ({ roomId }) => {
+    const stats = roomStats.get(roomId)
+    if (stats) {
+      const room = mediasoupService.getRoom(roomId)
+      const viewers = Array.from(room.peers.keys()).filter((id) => id !== room.hostPeerId)
+
+      io.to(roomId).emit('room-stats-updated', {
+        currentViewers: viewers.length,
+        peakViewers: stats.peakViewers,
+      })
+    }
+  })
+
+  socket.on('leave-room', ({ roomId }) => {
     console.log('Peer leaving room:', socket.id)
     cleanupPeer(socket, socket.id)
+    updateViewerStats(roomId)
 
     // Leave all rooms
     socket.rooms.forEach((roomId) => {

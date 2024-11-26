@@ -24,7 +24,7 @@ const showReportModal = ref(false)
 const reportedMessage = ref(null)
 const reportReason = ref('')
 
-const SERVER_URL = import.meta.env.VITE_SERVER_URI
+const VITE_API_SERVER_URI = import.meta.env.VITE_API_SERVER_URI
 
 const connect = () => {
   isConnecting.value = true
@@ -48,7 +48,7 @@ const connect = () => {
     client.subscribe(`/sub/chat/${props.roomId}`, (message) => {
       try {
         const receivedMessage = JSON.parse(message.body)
-        console.log('Received message:', receivedMessage)
+
         // 차단된 사용자의 메시지는 표시하지 않음
         if (!blockedUsers.value.has(receivedMessage.userName)) {
           messages.value.push(receivedMessage)
@@ -117,20 +117,20 @@ const scrollToBottom = () => {
 }
 
 const loadChatHistory = async () => {
-  const response = await fetch(`${SERVER_URL}/api/chat/history/${props.roomId}`)
+  const response = await fetch(`${VITE_API_SERVER_URI}/api/chat/history/${props.roomId}`)
 
-  if (response.ok) {
-    const history = await response.json()
-    // 차단된 사용자의 메시지를 필터링
-    messages.value = history.filter((msg) => !blockedUsers.value.has(msg.userName))
-    nextTick(() => {
-      scrollToBottom()
-    })
+  try {
+    if (response.ok) {
+      const history = await response.json()
+      // 차단된 사용자의 메시지를 필터링
+      messages.value = history.filter((msg) => !blockedUsers.value.has(msg.userName))
+      nextTick(() => {
+        scrollToBottom()
+      })
+    }
+  } catch (error) {
+    console.error('채팅 히스토리 로드 실패:', error)
   }
-  // try {
-  // } catch (error) {
-  //   console.error('채팅 히스토리 로드 실패:', error)
-  // }
 }
 
 // 사용자 차단 기능
@@ -260,7 +260,7 @@ onUnmounted(() => {
             <!-- 자신의 메시지가 아닌 경우에만 메뉴 버튼 표시 -->
             <div v-if="message.userName !== props.userName" class="message-actions">
               <button class="action-button" @click="openReportModal(message)">신고</button>
-              <button class="action-button" @click="blockUser(message.userName)">차단</button>
+              <!-- <button class="action-button" @click="blockUser(message.userName)">차단</button> -->
             </div>
           </div>
         </div>

@@ -35,10 +35,10 @@
       <div class="product-info-area">
         <div class="area-header">상품 정보</div>
         <div class="scrollable-content">
-          <product-info-component />
+          <product-info-component :roomId="roomId" />
           <div class="stream-summary-section">
             <h3 class="section-header">스트리밍 요약</h3>
-            <stream-summary-component />
+            <stream-summary-component :roomId="roomId" :socket="socket" />
           </div>
         </div>
       </div>
