@@ -24,6 +24,8 @@ const showReportModal = ref(false)
 const reportedMessage = ref(null)
 const reportReason = ref('')
 
+const SERVER_URL = import.meta.env.VITE_SERVER_URI
+
 const connect = () => {
   isConnecting.value = true
   connectionStatus.value = 'connecting'
@@ -115,8 +117,7 @@ const scrollToBottom = () => {
 }
 
 const loadChatHistory = async () => {
-  const response = await fetch(`http://127.0.0.1:8080/api/chat/history/${props.roomId}`)
-  console.log(response)
+  const response = await fetch(`${SERVER_URL}/api/chat/history/${props.roomId}`)
 
   if (response.ok) {
     const history = await response.json()
@@ -171,7 +172,7 @@ const submitReport = async () => {
         userId: 1,
         projectId: 1,
         reason: reportReason.value,
-        chatMessage: reportedMessage.value.connect,
+        chatMessage: reportedMessage.value.content,
       }),
     })
 

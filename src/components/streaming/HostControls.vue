@@ -8,7 +8,15 @@
         <div class="controls-bar">
           <h3>관리자 화면</h3>
           <div class="control-buttons">
-            <button @click="$emit('toggle-camera')" class="control-button">방송 종료</button>
+            <button
+              @click="handleRecording"
+              :class="['control-button', isRecording ? 'recording' : '']"
+            >
+              {{ isRecording ? '녹화 중지' : '녹화 시작' }}
+            </button>
+            <button @click="$emit('toggle-camera')" class="control-button">
+              {{ localStream ? '방송 종료' : '방송 계속하기' }}
+            </button>
             <button @click="$emit('leave')" class="leave-button">방 나가기</button>
           </div>
         </div>
@@ -18,6 +26,8 @@
 </template>
 
 <script setup>
+import { useScreenRecording } from '@/composables/useScreenRecording'
+
 defineProps({
   localStream: {
     type: MediaStream,
@@ -30,6 +40,16 @@ defineProps({
 })
 
 defineEmits(['leave', 'toggle-camera'])
+
+const { isRecording, startRecording, stopRecording } = useScreenRecording()
+
+const handleRecording = async () => {
+  if (isRecording.value) {
+    stopRecording()
+  } else {
+    await startRecording()
+  }
+}
 </script>
 
 <!-- scoped는 해당 컴포넌트의 css가 다른 컴포넌트에 영향을 주지 않도록 한다.(scope) -->
@@ -116,6 +136,23 @@ defineEmits(['leave', 'toggle-camera'])
 
 .leave-button:hover {
   background: #c82333;
+}
+
+.recording {
+  background: #dc3545 !important;
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.7;
+  }
+  100% {
+    opacity: 1;
+  }
 }
 
 @media (max-width: 768px) {
