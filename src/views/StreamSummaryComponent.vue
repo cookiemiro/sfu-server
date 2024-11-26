@@ -5,36 +5,20 @@
         <h4>현재 시청자</h4>
         <p class="stat-value">{{ stats.currentViewers }}<span>명</span></p>
       </div>
-      <!-- <div class="stat-box">
-        <h4>방송 시간</h4>
-        <p class="stat-value">{{ formattedDuration }}</p>
-      </div> -->
       <div class="stat-box">
         <h4>최고 동시 시청자</h4>
         <p class="stat-value">{{ stats.peakViewers }}<span>명</span></p>
       </div>
       <div class="stat-box">
         <h4>시청 시간</h4>
-        <p class="stat-value">{{ formattedDuration || '00:00' }}</p>
+        <p class="stat-value">{{ formattedDuration || '00:00:00' }}</p>
       </div>
     </div>
-
-    <!-- <div class="events-container">
-      <h4>실시간 알림</h4>
-      <div class="events-list">
-        <div v-for="event in events" :key="event.id" class="event-item">
-          <span class="event-time">{{ formatTime(event.timestamp) }}</span>
-          <span class="event-message">{{ event.message }}</span>
-        </div>
-      </div>
-    </div> -->
   </div>
 </template>
 
 <script setup>
 import { ref, computed, onMounted, onUnmounted } from 'vue'
-// import { formatDistanceToNow } from 'date-fns'
-// import { ko } from 'date-fns/locale'
 
 const props = defineProps({
   socket: {
@@ -51,10 +35,8 @@ const stats = ref({
   currentViewers: 0,
   peakViewers: 0,
   duration: 0,
-  joinTime: null, // 입장 시간 추가
+  joinTime: null,
 })
-
-const events = ref([])
 
 // 시청 시간 계산을 위한 interval
 let durationTimer = null
@@ -70,20 +52,6 @@ const formatDuration = (seconds) => {
   const m = Math.floor((seconds % 3600) / 60)
   const s = seconds % 60
   return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
-}
-
-//이벤트 추가 함수
-const addEvent = (message) => {
-  events.value.unshift({
-    id: Date.now(),
-    timestamp: Date.now(),
-    message,
-  })
-
-  // // 최대 10개까지만 보관
-  // if (events.value.length > 10) {
-  //   events.value.pop()
-  // }
 }
 
 const startDurationTimer = () => {
@@ -103,48 +71,28 @@ const startDurationTimer = () => {
 }
 
 onMounted(() => {
-    // 입장 시 타이머 시작
-    startDurationTimer()
+  // 입장 시 타이머 시작
+  startDurationTimer()
 
-    // 통계 업데이트 수신
-    props.socket.on('room-stats-updated', (newStats) => {
-      console.log('room-stats-updated', newStats)
-
-      // 기존 duration과 joinTime은 유지하면서 다른 통계만 업데이트
-      stats.value = {
-        ...stats.value,
-        currentViewers: newStats.currentViewers,
-        peakViewers: newStats.peakViewers,
-      }
-    })
-
-    // 시청자 수 변화 이벤트 추가
-    if (newStats.currentViewers !== stats.value.currentViewers) {
-      addEvent(`현재 시청자 수: ${newStats.currentViewers}명`)
-    }
-
-    // 최고 시청자 수 갱신 이벤트 추가
-    if (newStats.peakViewers > stats.value.peakViewers) {
-      addEvent(`최고 동시 시청자 수 갱신: ${newStats.peakViewers}명`)
+  // 통계 업데이트 수신
+  props.socket.on('room-stats-updated', (newStats) => {
+    console.log('room-stats-updated', newStats)
+    // 기존 duration과 joinTime은 유지하면서 다른 통계만 업데이트
+    stats.value = {
+      ...stats.value,
+      currentViewers: newStats.currentViewers - 1,
+      peakViewers: newStats.peakViewers - 1,
     }
   })
 
-  // // 새로운 시청자 입장 이벤트
-  // props.socket.on('new-peer', ({ peerId }) => {
-  //   addEvent(`새로운 시청자가 입장했습니다`)
-  // })
-
-  // // 시청자 퇴장 이벤트
-  // props.socket.on('peer-left', ({ peerId }) => {
-  //   addEvent(`시청자가 퇴장했습니다`)
-  // })
-
-    // 자신의 입장도 감지
-    props.socket.on('peer-joined', ({ peerId }) => {
+  // 자신의 입장 감지
+  props.socket.on('peer-joined', ({ peerId }, callback) => {
+    console.log('peer-joined', peerId)
+    console.log('socket.id', props.socket.id)
     if (peerId === props.socket.id) {
       console.log('Self joined the room')
       // 자신의 입장 시에도 통계 업데이트 요청
-      props.socket.emit('request-stats-update', { roomId: props.roomId })
+      callback(props.roomId)
     }
   })
 })
@@ -198,38 +146,5 @@ onUnmounted(() => {
   font-size: 0.875rem;
   color: #6c757d;
   margin-left: 0.25rem;
-}
-
-.events-container {
-  background-color: white;
-  padding: 1rem;
-  border-radius: 0.5rem;
-}
-
-.events-container h4 {
-  margin: 0 0 1rem 0;
-  font-size: 0.875rem;
-  font-weight: 600;
-}
-
-.events-list {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-}
-
-.event-item {
-  display: flex;
-  gap: 1rem;
-  font-size: 0.875rem;
-}
-
-.event-time {
-  color: #6c757d;
-  min-width: 60px;
-}
-
-.event-message {
-  color: #212529;
 }
 </style>

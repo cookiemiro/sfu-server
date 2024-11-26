@@ -191,8 +191,6 @@ io.on('connection', (socket) => {
       // 사용자의 현재 방 기록
       userRooms.set(peerId, roomId)
 
-      console.log(roomStats)
-
       // 방 통계가 없으면 초기화
       if (!roomStats.has(roomId)) {
         roomStats.set(roomId, {
@@ -206,21 +204,6 @@ io.on('connection', (socket) => {
       // 소켓을 해당 방에 조인
       socket.join(roomId)
 
-      // 방에 참여한 peer에게 알림
-      socket.emit('peer-joined', { peerId })
-
-      // 시청자 통계 업데이트
-      // 시청자 통계 업데이트
-      const viewers = Array.from(room.peers.keys()).filter((id) => id !== room.hostPeerId)
-      const stats = roomStats.get(roomId)
-      stats.currentViewers = viewers.length
-      stats.peakViewers = Math.max(stats.peakViewers, viewers.length)
-
-      io.to(roomId).emit('room-stats-updated', {
-        currentViewers: stats.currentViewers,
-        peakViewers: stats.peakViewers,
-      })
-
       // Send/Receive transport 생성
       const sendTransportOptions = await mediasoupService.createWebRtcTransport(room, peer, 'send')
       const recvTransportOptions = await mediasoupService.createWebRtcTransport(room, peer, 'recv')
@@ -228,6 +211,9 @@ io.on('connection', (socket) => {
       // 기존 피어 목록과 프로듀서 정보 수집
       const peerIds = Array.from(room.peers.keys()).filter((id) => id !== peerId)
       const existingProducers = room.getProducerList()
+
+      // 통계 업데이트
+      updateRoomStats(roomId, room)
 
       // 클라이언트에 응답
       socket.emit('room-joined', {
@@ -238,8 +224,25 @@ io.on('connection', (socket) => {
         existingProducers,
       })
 
-      // 다른 피어들에게 새 피어 입장 알림
-      socket.to(roomId).emit('new-peer', { peerId })
+      // 방 참여 이벤트 발송 (순서 중요)
+      socket.emit(
+        'peer-joined',
+        {
+          peerId,
+        },
+        ({ roomId }) => {
+          try {
+            const room = mediasoupService.getRoom(roomId)
+            if (room) {
+              updateRoomStats(roomId, room)
+            }
+          } catch (error) {
+            console.error('Error handling stats update request:', error)
+          }
+        },
+      )
+      // socket.to(roomId).emit('new-peer', { peerId })
+
       console.log(`Peer ${peerId} joined room ${roomId}`)
     } catch (error) {
       console.error('Error joining room:', error)
@@ -247,32 +250,44 @@ io.on('connection', (socket) => {
     }
   })
 
-  // 통계 업데이트 요청 처리
-  socket.on('request-stats-update', ({ roomId }) => {
+  // 통계 업데이트 함수
+  const updateRoomStats = (roomId, room) => {
     const stats = roomStats.get(roomId)
-    if (stats) {
-      const room = mediasoupService.getRoom(roomId)
-      const viewers = Array.from(room.peers.keys()).filter((id) => id !== room.hostPeerId)
+    if (!stats || !room) return
 
+    try {
+      const viewers = Array.from(room.peers.keys()).filter((id) => id !== room.hostPeerId)
+      stats.currentViewers = viewers.length
+      stats.peakViewers = Math.max(stats.peakViewers, viewers.length)
+
+      // 브로드캐스트 통계 업데이트
       io.to(roomId).emit('room-stats-updated', {
-        currentViewers: viewers.length,
+        currentViewers: stats.currentViewers,
         peakViewers: stats.peakViewers,
       })
+
+      console.log('Stats updated for room', roomId, {
+        currentViewers: stats.currentViewers,
+        peakViewers: stats.peakViewers,
+      })
+    } catch (error) {
+      console.error('Error updating room stats:', error)
     }
-  })
+  }
 
-  socket.on('leave-room', ({ roomId }) => {
-    console.log('Peer leaving room:', socket.id)
-    cleanupPeer(socket, socket.id)
-    updateViewerStats(roomId)
+  // 연결 해제 시에도 통계 업데이트
+  socket.on('disconnect', () => {
+    const peerId = socket.id
+    const roomId = userRooms.get(peerId)
 
-    // Leave all rooms
-    socket.rooms.forEach((roomId) => {
-      if (roomId !== socket.id) {
-        // Skip the default room
-        socket.leave(roomId)
+    if (roomId) {
+      cleanupPeer(socket, peerId)
+      const room = mediasoupService.getRoom(roomId)
+      if (room) {
+        updateRoomStats(roomId, room)
       }
-    })
+    }
+    console.log('Client disconnected:', peerId)
   })
 
   // Transport 연결 요청 처리
