@@ -88,6 +88,11 @@ onMounted(() => {
       peakViewers: newStats.peakViewers,
     }
   })
+
+  // 다른 피어 입장 시
+  props.socket.on('peer-joined', ({ peerId }) => {
+    console.log('Another peer joined:', peerId)
+  })
 })
 
 onUnmounted(() => {
@@ -98,6 +103,7 @@ onUnmounted(() => {
 
   // 이벤트 리스너 정리
   props.socket.off('room-stats-updated')
+  props.socket.off('peer-joined')
 })
 </script>
 

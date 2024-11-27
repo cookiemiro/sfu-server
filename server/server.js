@@ -33,8 +33,8 @@ const updateViewerStats = (socket, roomId) => {
   const stats = roomStats.get(roomId)
   if (!stats) return
 
-  // 호스트를 제외한 시청자 수 계산
-  const viewerCount = room.peers.size - (room.hostPeerId ? 1 : 0)
+  // 호스트를 제외한 순수 시청자 수 계산
+  const viewerCount = Array.from(room.peers.keys()).filter((id) => id !== room.producerId).length
 
   stats.currentViewers = viewerCount
   stats.peakViewers = Math.max(stats.peakViewers, viewerCount)
@@ -49,21 +49,33 @@ const updateViewerStats = (socket, roomId) => {
     peakViewers: stats.peakViewers,
     duration: Date.now() - stats.startTime,
   })
+}
 
-  // 이후 주기적으로 통계 업데이트
-  const statsInterval = setInterval(() => {
-    stats.duration = Date.now() - stats.startTime
+const updateRoomStats = (roomId, room) => {
+  const stats = roomStats.get(roomId)
+  if (!stats || !room) return
+
+  try {
+    const viewerCount = Array.from(room.peers.values())
+      .filter((peer) => peer.producers.size === 0)
+      .map((peer) => peer.id).length
+    stats.currentViewers = viewerCount
+    stats.peakViewers = Math.max(stats.peakViewers, viewerCount)
+
+    // 브로드캐스트 통계 업데이트
     io.to(roomId).emit('room-stats-updated', {
       currentViewers: stats.currentViewers,
       peakViewers: stats.peakViewers,
-      duration: stats.duration,
+      duration: Date.now() - stats.startTime,
     })
-  }, 1000)
 
-  // 소켓 연결이 끊어지면 인터벌 정리
-  socket.on('disconnect', () => {
-    clearInterval(statsInterval)
-  })
+    console.log('Stats updated for room', roomId, {
+      currentViewers: stats.currentViewers,
+      peakViewers: stats.peakViewers,
+    })
+  } catch (error) {
+    console.error('Error updating room stats:', error)
+  }
 }
 
 // Mediasoup 워커 초기화
@@ -224,6 +236,11 @@ io.on('connection', (socket) => {
         existingProducers,
       })
 
+      // 다른 피어들에게 새 피어 입장 알림
+      socket.to(roomId).emit('peer-joined', {
+        peerId,
+      })
+
       console.log(`Peer ${peerId} joined room ${roomId}`)
     } catch (error) {
       console.error('Error joining room:', error)
@@ -237,31 +254,6 @@ io.on('connection', (socket) => {
       updateRoomStats(roomId, room)
     }
   })
-
-  // 통계 업데이트 함수
-  const updateRoomStats = (roomId, room) => {
-    const stats = roomStats.get(roomId)
-    if (!stats || !room) return
-
-    try {
-      const viewers = Array.from(room.peers.keys()).filter((id) => id !== room.hostPeerId)
-      stats.currentViewers = viewers.length
-      stats.peakViewers = Math.max(stats.peakViewers, viewers.length)
-
-      // 브로드캐스트 통계 업데이트
-      io.to(roomId).emit('room-stats-updated', {
-        currentViewers: stats.currentViewers,
-        peakViewers: stats.peakViewers,
-      })
-
-      console.log('Stats updated for room', roomId, {
-        currentViewers: stats.currentViewers,
-        peakViewers: stats.peakViewers,
-      })
-    } catch (error) {
-      console.error('Error updating room stats:', error)
-    }
-  }
 
   // 연결 해제 시에도 통계 업데이트
   socket.on('disconnect', () => {
