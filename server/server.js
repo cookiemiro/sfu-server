@@ -224,29 +224,17 @@ io.on('connection', (socket) => {
         existingProducers,
       })
 
-      // 방 참여 이벤트 발송 (순서 중요)
-      socket.emit(
-        'peer-joined',
-        {
-          peerId,
-        },
-        ({ roomId }) => {
-          try {
-            const room = mediasoupService.getRoom(roomId)
-            if (room) {
-              updateRoomStats(roomId, room)
-            }
-          } catch (error) {
-            console.error('Error handling stats update request:', error)
-          }
-        },
-      )
-      // socket.to(roomId).emit('new-peer', { peerId })
-
       console.log(`Peer ${peerId} joined room ${roomId}`)
     } catch (error) {
       console.error('Error joining room:', error)
       socket.emit('error', { message: error.message })
+    }
+  })
+
+  socket.on('request-stats-update', ({ roomId }) => {
+    const room = mediasoupService.getRoom(roomId)
+    if (room) {
+      updateRoomStats(roomId, room)
     }
   })
 

@@ -18,7 +18,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted, onBeforeMount } from 'vue'
 
 const props = defineProps({
   socket: {
@@ -70,6 +70,10 @@ const startDurationTimer = () => {
   }, 1000)
 }
 
+onBeforeMount(() => {
+  props.socket.emit('request-stats-update', { roomId: props.roomId })
+})
+
 onMounted(() => {
   // 입장 시 타이머 시작
   startDurationTimer()
@@ -80,19 +84,8 @@ onMounted(() => {
     // 기존 duration과 joinTime은 유지하면서 다른 통계만 업데이트
     stats.value = {
       ...stats.value,
-      currentViewers: newStats.currentViewers - 1,
-      peakViewers: newStats.peakViewers - 1,
-    }
-  })
-
-  // 자신의 입장 감지
-  props.socket.on('peer-joined', ({ peerId }, callback) => {
-    console.log('peer-joined', peerId)
-    console.log('socket.id', props.socket.id)
-    if (peerId === props.socket.id) {
-      console.log('Self joined the room')
-      // 자신의 입장 시에도 통계 업데이트 요청
-      callback(props.roomId)
+      currentViewers: newStats.currentViewers,
+      peakViewers: newStats.peakViewers,
     }
   })
 })
@@ -105,7 +98,6 @@ onUnmounted(() => {
 
   // 이벤트 리스너 정리
   props.socket.off('room-stats-updated')
-  props.socket.off('peer-joined')
 })
 </script>
 
