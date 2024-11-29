@@ -10,8 +10,6 @@ import { ref, onMounted } from 'vue'
 // const videoRef = ref(null)
 const remoteMediaRef = ref(null)
 
-console.log(remoteMediaRef)
-
 const props = defineProps({
   setRemoteMediaEl: {
     type: Function,

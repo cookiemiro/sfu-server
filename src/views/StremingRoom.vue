@@ -10,7 +10,7 @@
     </div>
 
     <div v-else class="grid-container">
-      <!-- Streaming Area -->
+      <!-- 스트리밍 영역 -->
       <div class="streaming-area">
         <host-controls
           v-if="userRole === 'host'"
@@ -25,25 +25,21 @@
         <viewer-controls v-else @leave="leaveRoom" :set-remote-media-el="setRemoteMediaEl" />
       </div>
 
-      <!-- Chat Area -->
+      <!-- 채팅 영역 -->
       <div class="chat-area">
         <div class="area-header">실시간 채팅</div>
         <chat-component :roomId="roomId" :socket="socket" :user-name="userName" />
       </div>
 
-      <!-- Product Info Area -->
+      <!-- 상품 정보 영역 -->
       <div class="product-info-area">
         <div class="area-header">상품 정보</div>
         <div class="scrollable-content">
-          <product-info-component />
-        </div>
-      </div>
-
-      <!-- Stream Summary Area -->
-      <div class="stream-summary-area">
-        <div class="area-header">스트리밍 요약</div>
-        <div class="scrollable-content">
-          <stream-summary-component />
+          <product-info-component :roomId="roomId" />
+          <div class="stream-summary-section">
+            <h3 class="section-header">스트리밍 요약</h3>
+            <stream-summary-component :roomId="roomId" :socket="socket" />
+          </div>
         </div>
       </div>
     </div>
@@ -67,12 +63,8 @@ import RemoteMedia from '@/components/streaming/RemoteMedia.vue'
 const userName = ref('')
 
 const {
-  // refs
-  // 컴포넌트
   localVideoRef,
   remoteMediaRef,
-
-  // states
   socket,
   joined,
   roomId,
@@ -81,29 +73,16 @@ const {
   localStream,
   userRole,
   screenProducer,
-
-  // methods
   joinRoom,
   leaveRoom,
   toggleCamera,
-  // toggleScreenShare,
   initializeSocket,
   setRemoteMediaEl,
 } = useStreaming()
 
 onMounted(() => {
   initializeSocket()
-
-  // nextTick => DOM 업데이트 이후에 실행되는 콜백 함수
-  // nextTick(() => {
-  //   const remoteMediaRef = viewerControlsRef.value?.remoteRef?.remoteMediaRef?.value
-  // setRemoteMediaEl(remoteMediaRef)
-  // })
-
-  //  viewerControlsRef.value?.remoteRef?.remoteMediaRef?.value
 })
-
-// console.log('Remote Media Ref:', remoteMediaRef)
 
 onBeforeUnmount(() => {
   if (joined.value) {
@@ -117,51 +96,131 @@ onBeforeUnmount(() => {
 .streaming-layout {
   width: 100%;
   height: 100vh;
+  max-height: 100vh;
   padding: 1rem;
   overflow: hidden;
+  box-sizing: border-box;
 }
 
 .grid-container {
   display: grid;
-  grid-template-columns: 60% 40%;
-  grid-template-rows: 60% 40%;
   gap: 1rem;
   height: calc(100vh - 2rem);
+  grid-template-columns: repeat(12, 1fr);
+  grid-template-rows: repeat(12, 1fr);
 }
 
-.streaming-area {
-  background-color: #f8f9fa;
-  border-radius: 0.5rem;
-  padding: 1rem;
-  overflow: hidden;
+/* 데스크탑 레이아웃 */
+@media screen and (min-width: 1024px) {
+  .streaming-area {
+    grid-column: 1 / 8; /* 7칸 차지 */
+    grid-row: 1 / 8; /* 7칸 차지 */
+    background-color: #f8f9fa;
+    border-radius: 0.5rem;
+    padding: 1rem;
+    overflow: hidden;
+    min-height: 0;
+  }
+
+  .chat-area {
+    grid-column: 8 / 13; /* 5칸 차지 */
+    grid-row: 1 / 13; /* 전체 높이 */
+    background-color: #f8f9fa;
+    border-radius: 0.5rem;
+    padding: 1rem;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  .product-info-area {
+    grid-column: 1 / 8; /* 7칸 차지 */
+    grid-row: 8 / 13; /* 5칸 차지 */
+    background-color: #f8f9fa;
+    border-radius: 0.5rem;
+    padding: 1rem;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
 }
 
-.chat-area {
-  background-color: #f8f9fa;
-  border-radius: 0.5rem;
-  padding: 1rem;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
+/* 태블릿 레이아웃 */
+@media screen and (min-width: 768px) and (max-width: 1023px) {
+  .grid-container {
+    grid-template-rows: auto;
+    gap: 0.75rem;
+  }
+
+  .streaming-area {
+    grid-column: 1 / 8;
+    grid-row: 1 / 7;
+  }
+
+  .chat-area {
+    grid-column: 8 / 13;
+    grid-row: 1 / 13;
+  }
+
+  .product-info-area {
+    grid-column: 1 / 8;
+    grid-row: 7 / 13;
+  }
 }
 
-.product-info-area,
-.stream-summary-area {
-  background-color: #f8f9fa;
-  border-radius: 0.5rem;
-  padding: 1rem;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
+/* 모바일 레이아웃 */
+@media screen and (max-width: 767px) {
+  .streaming-layout {
+    height: auto;
+    padding: 0.5rem;
+    overflow-y: auto;
+  }
+
+  .grid-container {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    height: auto;
+  }
+
+  .streaming-area {
+    width: 100%;
+    aspect-ratio: 16/9;
+    min-height: 200px;
+    order: 1; /* 첫 번째로 표시 */
+  }
+
+  .chat-area {
+    width: 100%;
+    height: 400px;
+    order: 2; /* 두 번째로 표시 */
+  }
+
+  .product-info-area {
+    width: 100%;
+    height: 300px;
+    order: 3; /* 세 번째로 표시 */
+  }
 }
 
+/* 작은 모바일 화면 */
+@media screen and (max-width: 480px) {
+  .chat-area {
+    height: 350px;
+  }
+
+  .product-info-area {
+    height: 250px;
+  }
+}
+
+/* 공통 스타일 */
 .area-header {
   font-size: 1.25rem;
   font-weight: 600;
-  margin-bottom: 1rem;
+  margin-bottom: 0.75rem;
   padding-bottom: 0.5rem;
   border-bottom: 1px solid #dee2e6;
-  flex-shrink: 0;
 }
 
 .scrollable-content {
@@ -170,86 +229,59 @@ onBeforeUnmount(() => {
   padding-right: 0.5rem;
 }
 
+.section-header {
+  font-size: 1.1rem;
+  font-weight: 600;
+  margin: 1rem 0 0.5rem;
+  padding-top: 1rem;
+  border-top: 1px solid #dee2e6;
+}
+
 /* 스크롤바 스타일링 */
 .scrollable-content::-webkit-scrollbar {
-  width: 6px;
+  width: 4px;
 }
 
 .scrollable-content::-webkit-scrollbar-track {
   background: #f1f1f1;
-  border-radius: 3px;
+  border-radius: 2px;
 }
 
 .scrollable-content::-webkit-scrollbar-thumb {
   background: #888;
-  border-radius: 3px;
+  border-radius: 2px;
 }
 
 .scrollable-content::-webkit-scrollbar-thumb:hover {
   background: #555;
 }
 
-/* 반응형 디자인 */
-@media (max-width: 768px) {
-  .streaming-layout {
-    padding: 0.5rem;
-    height: 100vh;
-    overflow-y: auto;
-  }
-
-  .grid-container {
-    display: flex;
-    flex-direction: column;
-    height: auto;
-    gap: 0.5rem;
-  }
-
-  .streaming-area {
-    width: 100%;
-    aspect-ratio: 16/9; /* 비디오 비율 유지 */
-    min-height: auto;
-  }
-
-  .chat-area {
-    width: 100%;
-    height: 400px; /* 채팅 영역 고정 높이 */
-    min-height: 400px;
-    max-height: 400px;
-  }
-
-  .product-info-area,
-  .stream-summary-area {
-    width: 100%;
-    height: 300px; /* 각 영역 고정 높이 */
-    min-height: 300px;
-    max-height: 300px;
-  }
-
-  .area-header {
-    font-size: 1.1rem;
-    margin-bottom: 0.5rem;
-    padding-bottom: 0.5rem;
-  }
-
-  /* 모바일에서 마지막 요소 아래 여백 추가 */
-  .stream-summary-area {
-    margin-bottom: 1rem;
-  }
+/* 각 영역 내부 스크롤 설정 */
+.streaming-area,
+.chat-area,
+.product-info-area {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
-/* 더 작은 화면에서의 높이 조정 */
-@media (max-width: 480px) {
-  .chat-area {
-    height: 300px;
-    min-height: 300px;
-    max-height: 300px;
-  }
+:deep(.chat-container) {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
 
-  .product-info-area,
-  .stream-summary-area {
-    height: 250px;
-    min-height: 250px;
-    max-height: 250px;
-  }
+:deep(.messages-wrapper) {
+  flex: 1;
+  overflow-y: auto;
+}
+
+:deep(.input-wrapper) {
+  flex-shrink: 0;
+  margin-top: auto;
+  background-color: white;
+  border-top: 1px solid #dee2e6;
+  padding: 0.5rem;
 }
 </style>

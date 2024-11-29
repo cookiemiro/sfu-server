@@ -1,29 +1,59 @@
 <template>
   <div class="product-container">
-    <div v-for="product in products" :key="product.id" class="product-card">
-      <img :src="product.image" :alt="product.name" class="product-image" />
+    <div class="product-card">
+      <!-- <img :src="product.images[0].url" :alt="product.productName" class="product-image" /> -->
+      <img
+        v-if="product.images && product.images.length > 0"
+        :src="product.images[0].url"
+        :alt="product.productName"
+        class="product-image"
+      />
       <div class="product-details">
-        <h3 class="product-name">{{ product.name }}</h3>
+        <h3 class="product-name">{{ product.productName }}</h3>
         <p class="product-price">{{ product.price }}원</p>
-        <p class="product-description">{{ product.description }}</p>
+        <p class="product-description">{{ product.summary }}</p>
       </div>
     </div>
   </div>
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { ref, onMounted } from 'vue'
 
-const products = ref([
-  {
-    id: 1,
-    name: '상품 1',
-    price: '29,900',
-    description: '상품 설명입니다.',
-    image: '/api/placeholder/100/100',
+const props = defineProps({
+  roomId: {
+    type: String,
+    required: true,
   },
-  // 더 많은 상품 추가
-])
+})
+
+const product = ref({
+  productName: '',
+  price: 0,
+  summary: '',
+  images: [],
+})
+
+const VITE_API_SERVER_URI = import.meta.env.VITE_API_SERVER_URI
+
+const getProduct = async () => {
+  const response = await fetch(`${VITE_API_SERVER_URI}/api/project/${props.roomId}`)
+
+  try {
+    if (response.ok) {
+      const project_info = await response.json()
+      console.log('상품 정보 로드 성공', project_info)
+      product.value = project_info
+      console.log('product:', product.value.images[0].url)
+    }
+  } catch (error) {
+    console.error('채팅 히스토리 로드 실패:', error)
+  }
+}
+
+onMounted(() => {
+  getProduct()
+})
 </script>
 
 <style scoped>

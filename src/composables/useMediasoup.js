@@ -279,6 +279,7 @@ export const useMediasoup = () => {
         socket.value.removeAllListeners('new-peer')
         socket.value.removeAllListeners('peer-left')
         socket.value.removeAllListeners('viewers-updated')
+        socket.value.removeAllListeners('room-stats-updated')
         socket.value.disconnect()
         socket.value = null
       }
