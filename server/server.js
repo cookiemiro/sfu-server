@@ -352,29 +352,6 @@ io.on('connection', (socket) => {
       socket.emit('error', { message: error.message })
     }
   })
-
-  // 피어 연결 해제 처리
-  socket.on('disconnect', () => {
-    console.log('Client disconnected:', socket.id)
-
-    mediasoupService.rooms.forEach((room, roomId) => {
-      // const peer = room.getPeer(socket.id)
-      // if (peer) {
-      //   peer.close()
-      //   room.removePeer(socket.id)
-      //   socket.to(roomId).emit('peer-left', { peerId: socket.id })
-      //   console.log(`Peer ${socket.id} left room ${roomId}`)
-
-      //   // 방에 아무도 없으면 방 제거
-      //   if (room.peers.size === 0) {
-      //     mediasoupService.removeRoom(roomId)
-      //     console.log(`Room ${roomId} removed`)
-      //   }
-      // }
-      console.log('Client disconnected:', socket.id)
-      cleanupPeer(socket, socket.id)
-    })
-  })
 })
 
 // 에러 처리
