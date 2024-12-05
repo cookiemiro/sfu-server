@@ -81,6 +81,7 @@ const updateRoomStats = (roomId, room) => {
 // Mediasoup 워커 초기화
 await mediasoupService.initialize(1) // 1개의 워커 생성
 
+// 방송 종료하는 서버 함수
 const cleanupPeer = (socket, peerId) => {
   // 현재 사용자가 있는 방 ID 가져오기
   const roomId = userRooms.get(peerId)
@@ -96,6 +97,12 @@ const cleanupPeer = (socket, peerId) => {
     userRooms.delete(peerId)
     return
   }
+
+  // 호스트가 나가는 경우 시청자들에게 방송 종료 알림
+  // if (room.hostPeerId === peerId) {
+  //   socket.to(roomId).emit('host-ended-stream')
+  //   console.log(`Host ${peerId} ended stream in room ${roomId}`)
+  // }
 
   // Peer 제거
   const peer = room.getPeer(peerId)
@@ -172,9 +179,43 @@ io.on('connection', (socket) => {
         })
       }
 
+      socket.to(roomId).emit('host-ended-stream')
+
+      // 호스트 확인
+      if (room.hostPeerId === socket.id) {
+        // 시청자들에게 방송 종료 알림
+        socket.to(roomId).emit('host-ended-stream')
+        console.log(`Host ${socket.id} ended stream in room ${roomId}`)
+      }
+
       console.log(`Camera stopped for peer ${peerId} in room ${roomId}`)
     } catch (error) {
       console.error('Error stopping camera:', error)
+      socket.emit('error', { message: error.message })
+    }
+  })
+
+  // socket.io connection 핸들러 내부에 추가
+  // 호스트의 방송 종료 이벤트
+  socket.on('end-stream', ({ roomId }) => {
+    try {
+      const room = mediasoupService.getRoom(roomId)
+      if (!room) throw new Error('Room not found')
+      console.log(`Host ${socket.id} ended stream in room ${roomId}`)
+
+      socket.to(roomId).emit('host-ended-stream')
+
+      cleanupPeer(socket, socket.id)
+      // 호스트 확인
+      if (room.hostPeerId === socket.id) {
+        // 시청자들에게 방송 종료 알림
+        socket.to(roomId).emit('host-ended-stream')
+        console.log(`Host ${socket.id} ended stream in room ${roomId}`)
+
+        // 방송 종료 처리
+      }
+    } catch (error) {
+      console.error('Error ending stream:', error)
       socket.emit('error', { message: error.message })
     }
   })
